@@ -1,0 +1,23 @@
+{
+    "name": "minecraft-debug-bridge",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "dist/index.js",
+    "bin": {
+        "minecraft-debug-bridge": "dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc",
+        "start": "node dist/index.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.0.0",
+        "ws": "^8.16.0",
+        "zod": "^3.22.0"
+    },
+    "devDependencies": {
+        "@types/ws": "^8.5.0",
+        "@types/node": "^20.0.0",
+        "typescript": "^5.3.0"
+    }
+}

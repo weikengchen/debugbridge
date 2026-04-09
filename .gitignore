@@ -1,0 +1,66 @@
+# --- Gradle ----------------------------------------------------------------
+.gradle/
+build/
+**/build/
+
+# Loom / Fabric Loom run dirs and caches
+.loom-cache/
+**/.loom-cache/
+run/
+**/run/
+
+# --- IDEs ------------------------------------------------------------------
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.code-workspace
+.fleet/
+
+# Eclipse
+.classpath
+.project
+.settings/
+bin/
+
+# --- Java ------------------------------------------------------------------
+*.class
+hs_err_pid*
+replay_pid*
+
+# Built jars (gradle puts them under build/, already covered, but
+# catch any stray ones in the working tree).
+*.jar
+# ...except the Gradle wrapper, which has to be checked in.
+!gradle/wrapper/gradle-wrapper.jar
+!**/gradle/wrapper/gradle-wrapper.jar
+
+# --- Node / TypeScript (mcp-server) ----------------------------------------
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- OS junk ---------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Local environment / secrets -------------------------------------------
+.env
+.env.*
+*.local
+*.pem
+*.key
+
+# --- Logs ------------------------------------------------------------------
+*.log
+logs/
