@@ -8,10 +8,17 @@ export class BridgeSession {
         resolve: (resp: BridgeResponse) => void;
         reject: (err: Error) => void;
     }>();
+    private defaultPort: number;
 
-    async connect(port: number = 9876): Promise<SessionInfo> {
+    constructor(defaultPort: number = 9876) {
+        this.defaultPort = defaultPort;
+    }
+
+    async connect(port?: number): Promise<SessionInfo> {
+        const targetPort = port ?? this.defaultPort;
+        this.defaultPort = targetPort; // remember for future auto-connects
         return new Promise((resolve, reject) => {
-            const wsUrl = `ws://127.0.0.1:${port}`;
+            const wsUrl = `ws://127.0.0.1:${targetPort}`;
             this.ws = new WebSocket(wsUrl);
 
             const timeout = setTimeout(() => {
@@ -61,7 +68,7 @@ export class BridgeSession {
 
     async send(type: string, payload: Record<string, unknown>): Promise<BridgeResponse> {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            throw new Error("Not connected. Use the mc_connect tool first.");
+            await this.connect();
         }
 
         const id = `req_${++this.requestCounter}`;

@@ -4,7 +4,14 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { BridgeSession } from "./session.js";
 
-const session = new BridgeSession();
+const DEFAULT_PORT = (() => {
+    const raw = process.env.DEBUGBRIDGE_PORT;
+    if (!raw) return 9876;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 && n <= 65535 ? n : 9876;
+})();
+
+const session = new BridgeSession(DEFAULT_PORT);
 
 const server = new McpServer({
     name: "minecraft-debug-bridge",
@@ -15,16 +22,19 @@ const server = new McpServer({
 server.tool(
     "mc_connect",
     `Connect to a running Minecraft instance with the DebugBridge mod.
-Must be called before any other mc_* tools. Returns version and mapping info.`,
+Optional — other mc_* tools auto-connect if needed. Useful to specify a
+non-default port or to get session info (version, mapping info, paths to
+game directory and log files). Use the Read tool on latestLog / debugLog
+to view game logs.`,
     {
-        port: z.number().optional().describe("WebSocket port the mod is listening on. Default: 9876"),
+        port: z.number().optional().describe(`WebSocket port the mod is listening on. Default: ${DEFAULT_PORT}`),
     },
     async ({ port }) => {
         if (session.isConnected) {
             return { content: [{ type: "text" as const, text: "Already connected. Use mc_disconnect first." }] };
         }
         try {
-            const info = await session.connect(port ?? 9876);
+            const info = await session.connect(port ?? DEFAULT_PORT);
             return { content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }] };
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
@@ -135,6 +145,59 @@ No Lua needed — quick overview of current state.`,
     }
 );
 
+// mc_screenshot
+server.tool(
+    "mc_screenshot",
+    `Capture the current Minecraft client framebuffer as a JPEG file on the
+machine running the mod, and return its absolute path. Use the Read tool
+to view the image.
+
+The capture runs on the render thread and pauses for at most one frame;
+the game otherwise continues. Works while the game is paused (returns the
+last rendered frame).
+
+Defaults are tuned for low-bandwidth visual inspection: downscale=2,
+quality=0.75. Override only if you specifically need higher fidelity.
+
+The mod and the MCP server must run on the same machine for the returned
+path to be readable here.`,
+    {
+        downscale: z.number().int().min(1).max(16).optional()
+            .describe("Integer downscale factor. 1 = full window resolution. 2 = half each axis (default)."),
+        quality: z.number().min(0.05).max(1.0).optional()
+            .describe("JPEG quality in [0.05, 1.0]. Default: 0.75."),
+    },
+    async ({ downscale, quality }) => {
+        try {
+            const payload: Record<string, unknown> = {};
+            if (downscale !== undefined) payload.downscale = downscale;
+            if (quality !== undefined) payload.quality = quality;
+            const resp = await session.send("screenshot", payload);
+            if (!resp.success) {
+                return { content: [{ type: "text" as const, text: `Error: ${resp.error}` }], isError: true };
+            }
+            const result = resp.result as
+                | { path: string; width: number; height: number; sizeBytes: number; mimeType: string }
+                | undefined;
+            if (!result || typeof result.path !== "string") {
+                return { content: [{ type: "text" as const, text: "Screenshot returned no path." }], isError: true };
+            }
+            const kb = (result.sizeBytes / 1024).toFixed(1);
+            return {
+                content: [
+                    {
+                        type: "text" as const,
+                        text: `${result.path}\n(${result.width}×${result.height} JPEG, ${kb} KB)`,
+                    },
+                ],
+            };
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { content: [{ type: "text" as const, text: msg }], isError: true };
+        }
+    }
+);
+
 // mc_run_command
 server.tool(
     "mc_run_command",
@@ -151,6 +214,147 @@ The leading "/" is optional.`,
                 return { content: [{ type: "text" as const, text: `Error: ${resp.error}` }], isError: true };
             }
             return { content: [{ type: "text" as const, text: JSON.stringify(resp.result, null, 2) }] };
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { content: [{ type: "text" as const, text: msg }], isError: true };
+        }
+    }
+);
+
+// mc_inject_logger
+server.tool(
+    "mc_inject_logger",
+    `Inject a runtime logger into a Minecraft method to trace calls.
+
+Uses Java Agent instrumentation to inline logging hooks into the target method.
+The logger captures method entry/exit, arguments, return values, and timing.
+
+IMPORTANT: This modifies bytecode at runtime. While designed to be safe and
+coexist with Mixin, avoid targeting methods in hot paths (called >10k/sec)
+or methods critical to game stability unless necessary.
+
+The output_file will be created on the machine running Minecraft.
+Use the Read tool to view the log file.
+
+Filter types:
+- throttle: { "type": "throttle", "interval_ms": 200 } — rate limit logging
+- arg_contains: { "type": "arg_contains", "index": 0, "substring": "Player" }
+- arg_instanceof: { "type": "arg_instanceof", "index": 0, "class_name": "Entity" }
+- sample: { "type": "sample", "n": 10 } — log every Nth call`,
+    {
+        method: z.string().describe(
+            "Fully qualified method name using Mojang names, e.g. 'net.minecraft.client.Minecraft.tick'"
+        ),
+        duration_seconds: z.number().min(1).max(3600).optional()
+            .describe("How long the logger stays active. Default: 60 seconds. Max: 1 hour."),
+        output_file: z.string().optional()
+            .describe("Path to log file. Default: /tmp/debugbridge-<method>-<timestamp>.log"),
+        log_args: z.boolean().optional()
+            .describe("Log method arguments. Default: true"),
+        log_return: z.boolean().optional()
+            .describe("Log return value. Default: false"),
+        log_timing: z.boolean().optional()
+            .describe("Log elapsed time. Default: true"),
+        arg_depth: z.number().int().min(0).max(3).optional()
+            .describe("Depth of argument inspection. 0=class@hash, 1+=toString(). Default: 1"),
+        filter: z.object({
+            type: z.enum(["throttle", "arg_contains", "arg_instanceof", "sample"]),
+            interval_ms: z.number().optional(),
+            index: z.number().int().optional(),
+            substring: z.string().optional(),
+            class_name: z.string().optional(),
+            n: z.number().int().optional(),
+        }).optional().describe("Optional filter to reduce log volume"),
+    },
+    async ({ method, duration_seconds, output_file, log_args, log_return, log_timing, arg_depth, filter }) => {
+        try {
+            const resp = await session.send("injectLogger", {
+                method,
+                duration_seconds: duration_seconds ?? 60,
+                output_file: output_file ?? null,
+                log_args: log_args ?? true,
+                log_return: log_return ?? false,
+                log_timing: log_timing ?? true,
+                arg_depth: arg_depth ?? 1,
+                filter: filter ?? null,
+            });
+            if (!resp.success) {
+                return { content: [{ type: "text" as const, text: `Error: ${resp.error}` }], isError: true };
+            }
+            const result = resp.result as { logger_id: number; output_file: string; message?: string };
+            let text = `Logger #${result.logger_id} installed on ${method}\n`;
+            text += `Output: ${result.output_file}\n`;
+            text += `Duration: ${duration_seconds ?? 60} seconds`;
+            if (result.message) text += `\n${result.message}`;
+            return { content: [{ type: "text" as const, text }] };
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { content: [{ type: "text" as const, text: msg }], isError: true };
+        }
+    }
+);
+
+// mc_cancel_logger
+server.tool(
+    "mc_cancel_logger",
+    `Cancel an active logger by ID. The logger stops immediately but the
+injected advice bytecode remains (negligible overhead when inactive).`,
+    {
+        id: z.number().int().describe("Logger ID returned by mc_inject_logger"),
+    },
+    async ({ id }) => {
+        try {
+            const resp = await session.send("cancelLogger", { id });
+            if (!resp.success) {
+                return { content: [{ type: "text" as const, text: `Error: ${resp.error}` }], isError: true };
+            }
+            const result = resp.result as { cancelled: boolean };
+            if (result.cancelled) {
+                return { content: [{ type: "text" as const, text: `Logger #${id} cancelled.` }] };
+            } else {
+                return { content: [{ type: "text" as const, text: `Logger #${id} not found (may have already expired).` }] };
+            }
+        } catch (e: unknown) {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { content: [{ type: "text" as const, text: msg }], isError: true };
+        }
+    }
+);
+
+// mc_list_loggers
+server.tool(
+    "mc_list_loggers",
+    `List all currently active loggers. Shows logger ID, target method,
+remaining time, and whether a filter is active.`,
+    {},
+    async () => {
+        try {
+            const resp = await session.send("listLoggers", {});
+            if (!resp.success) {
+                return { content: [{ type: "text" as const, text: `Error: ${resp.error}` }], isError: true };
+            }
+            const result = resp.result as {
+                loggers: Array<{ id: number; method: string; remaining_ms: number; has_filter: boolean }>;
+                injected_methods: string[];
+            };
+            if (result.loggers.length === 0) {
+                let text = "No active loggers.";
+                if (result.injected_methods.length > 0) {
+                    text += `\n\nMethods with advice installed (inactive): ${result.injected_methods.length}`;
+                }
+                return { content: [{ type: "text" as const, text }] };
+            }
+            let text = "Active loggers:\n";
+            for (const logger of result.loggers) {
+                const remainingSec = Math.round(logger.remaining_ms / 1000);
+                text += `  #${logger.id}: ${logger.method} (${remainingSec}s remaining`;
+                if (logger.has_filter) text += ", filtered";
+                text += ")\n";
+            }
+            if (result.injected_methods.length > result.loggers.length) {
+                text += `\nMethods with advice installed: ${result.injected_methods.length}`;
+            }
+            return { content: [{ type: "text" as const, text: text.trim() }] };
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             return { content: [{ type: "text" as const, text: msg }], isError: true };

@@ -46,6 +46,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# --- MCPB bundle (generated) -----------------------------------------------
+# Only manifest.json + package.json under mcp-server/mcpb/ are source;
+# server/, icon.png, package-lock.json, and the packed .mcpb are built output.
+mcp-server/mcpb/server/
+mcp-server/mcpb/icon.png
+mcp-server/mcpb/package-lock.json
+mcp-server/*.mcpb
+
 # --- OS junk ---------------------------------------------------------------
 .DS_Store
 .AppleDouble
@@ -64,3 +72,7 @@ Desktop.ini
 # --- Logs ------------------------------------------------------------------
 *.log
 logs/
+
+# MCP server build artifacts
+mcp-server/mcpb/
+mcp-server/*.mcpb

@@ -1,6 +1,6 @@
 export interface BridgeRequest {
     id: string;
-    type: "execute" | "search" | "snapshot" | "runCommand" | "status";
+    type: "execute" | "search" | "snapshot" | "screenshot" | "runCommand" | "status";
     payload: Record<string, unknown>;
 }
 
@@ -17,6 +17,16 @@ export interface SessionInfo {
     mappingStatus: "mojang" | "passthrough";
     obfuscated: boolean;
     refs: number;
+    /** Absolute path to the game run directory (.minecraft / profile root). */
+    gameDir?: string;
+    /** Absolute path to the logs directory inside gameDir. */
+    logsDir?: string;
+    /** Absolute path to latest.log — use the Read tool to view it. */
+    latestLog?: string;
+    latestLogExists?: boolean;
+    /** Absolute path to debug.log — use the Read tool to view it. */
+    debugLog?: string;
+    debugLogExists?: boolean;
 }
 
 export interface SearchResult {

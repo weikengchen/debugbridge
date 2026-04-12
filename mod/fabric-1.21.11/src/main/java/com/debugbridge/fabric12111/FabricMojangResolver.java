@@ -155,39 +155,29 @@ public class FabricMojangResolver implements MappingResolver {
     }
 
     /**
-     * Try Fabric's mapMethodName on the declaring class and all parent classes/interfaces
-     * from ProGuard mappings. Fabric only maps methods on the class that originally declares them.
+     * Ask Fabric to translate (mojangClassName.obfMethodName / obfJvmDesc) from the
+     * "official" namespace into the runtime intermediary namespace.
+     *
+     * Critically, this is STRICT — it only consults the originally-passed Mojang
+     * class. An earlier version walked every class in the ProGuard mappings that
+     * declared a method with the same name; that produced confidently-wrong
+     * answers because methods sharing a name on unrelated classes resolve to
+     * different intermediary names. The hierarchy walk for inherited methods is
+     * the {@link com.debugbridge.core.lua.MethodCallWrapper}'s job (it walks the
+     * runtime class+interface graph and calls this resolver once per Mojang
+     * ancestor). Trying to be clever here drops names from the wrong class on the
+     * floor.
      */
     private String tryFabricMethodMapping(String mojangClassName, String mojangMethodName,
                                            String methodKey, String obfMethodName, String obfJvmDesc) {
-        // Collect all classes to try: the given class plus all classes in ProGuard
-        // that declare a method with the same Mojang name and compatible signature
-        List<String> classesToTry = new ArrayList<>();
-        classesToTry.add(mojangClassName);
-
-        // Search ProGuard mappings for all classes that declare this method name
-        for (String otherMojangClass : mappings.methods.keySet()) {
-            if (otherMojangClass.equals(mojangClassName)) continue;
-            Map<String, String> otherMethods = mappings.methods.get(otherMojangClass);
-            if (otherMethods != null && otherMethods.containsKey(methodKey)) {
-                classesToTry.add(otherMojangClass);
+        String obfClass = mappings.classes.getOrDefault(mojangClassName, mojangClassName);
+        try {
+            String mapped = fabricResolver.mapMethodName("official", obfClass, obfMethodName, obfJvmDesc);
+            if (!mapped.equals(obfMethodName)) {
+                return mapped;
             }
-        }
-
-        for (String tryClass : classesToTry) {
-            String obfClass = mappings.classes.getOrDefault(tryClass, tryClass);
-            Map<String, String> tryMethods = mappings.methods.get(tryClass);
-            String tryObfMethod = tryMethods != null ? tryMethods.get(methodKey) : null;
-            if (tryObfMethod == null) tryObfMethod = obfMethodName;
-
-            try {
-                String mapped = fabricResolver.mapMethodName("official", obfClass, tryObfMethod, obfJvmDesc);
-                if (!mapped.equals(tryObfMethod)) {
-                    return mapped;
-                }
-            } catch (Exception e) {
-                // continue
-            }
+        } catch (Exception e) {
+            // not mapped on this class; caller will walk to parents/interfaces
         }
         return null;
     }

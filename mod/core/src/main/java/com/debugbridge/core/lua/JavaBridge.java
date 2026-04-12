@@ -424,10 +424,11 @@ public class JavaBridge {
             }
             result.set("fields", fieldsTable);
 
-            // Methods (include inherited, non-private)
+            // Methods (include inherited, non-private, including interface defaults)
             LuaTable methodsTable = new LuaTable();
             idx = 1;
             Set<String> seen = new HashSet<>();
+            // Walk superclasses
             for (Class<?> c = cls; c != null && c != Object.class; c = c.getSuperclass()) {
                 for (Method m : c.getDeclaredMethods()) {
                     String sig = m.getName() + "(" + m.getParameterCount() + ")";
@@ -452,6 +453,30 @@ public class JavaBridge {
                     if (!declaring.equals(mojangName)) {
                         entry.set("declaredIn", declaring);
                     }
+                    methodsTable.set(idx++, entry);
+                }
+            }
+            // Also walk interfaces (for default methods like getEntitiesOfClass)
+            for (Class<?> iface : getAllInterfaces(cls)) {
+                for (Method m : iface.getDeclaredMethods()) {
+                    String sig = m.getName() + "(" + m.getParameterCount() + ")";
+                    if (seen.contains(sig)) continue;
+                    seen.add(sig);
+
+                    LuaTable entry = new LuaTable();
+                    String methodMojangName = getMethodMojangName(iface, m);
+                    entry.set("name", methodMojangName);
+                    entry.set("returnType", resolver.unresolveClass(m.getReturnType().getName()));
+                    entry.set("static", LuaValue.valueOf(Modifier.isStatic(m.getModifiers())));
+
+                    LuaTable params = new LuaTable();
+                    int pi = 1;
+                    for (Class<?> p : m.getParameterTypes()) {
+                        params.set(pi++, resolver.unresolveClass(p.getName()));
+                    }
+                    entry.set("params", params);
+
+                    entry.set("declaredIn", resolver.unresolveClass(iface.getName()));
                     methodsTable.set(idx++, entry);
                 }
             }
@@ -641,20 +666,67 @@ public class JavaBridge {
 
     // ==================== Helper methods ====================
 
-    private String getMethodMojangName(Class<?> declaringClass, Method m) {
-        String runtimeClassName = declaringClass.getName();
-        String mojangClassName = resolver.unresolveClass(runtimeClassName);
-        // Try to reverse-lookup the method name
-        Collection<String> sigs = resolver.getMethodSignatures(mojangClassName);
-        for (String sig : sigs) {
+    /**
+     * Reverse-lookup: given a runtime {@link Method}, find a Mojang method name
+     * for it (or fall back to the runtime name).
+     *
+     * Walks the declaring class's full ancestor graph (superclasses + super-interfaces)
+     * because Fabric's runtime mappings only attach methods to the class that
+     * <em>originally</em> declares them: e.g. {@code Entity.method_5628} is
+     * mapped via {@code EntityAccess.getId}, not via {@code Entity.getId}.
+     * Without the walk, every method that's only known via an ancestor
+     * interface comes back as its raw {@code method_NNNN} name.
+     */
+    public String getMethodMojangName(Class<?> declaringClass, Method m) {
+        Map<String, String> reverse = getReverseMethodTable(declaringClass);
+        return reverse.getOrDefault(m.getName(), m.getName());
+    }
+
+    /**
+     * Build (and cache) a runtime-method-name → Mojang-method-name table for the
+     * full ancestor graph of {@code clazz}. Walks classes + super-interfaces in
+     * BFS order; the first Mojang sig that resolves to a given runtime name wins.
+     */
+    private Map<String, String> getReverseMethodTable(Class<?> clazz) {
+        Map<String, String> cached = reverseMethodCache.get(clazz);
+        if (cached != null) return cached;
+
+        Map<String, String> table = new HashMap<>();
+        // Walk class hierarchy.
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
+            populateReverseFromClass(c, table);
+        }
+        // Walk all interfaces (recursive over super-interfaces).
+        Set<Class<?>> ifaces = new LinkedHashSet<>();
+        Deque<Class<?>> queue = new ArrayDeque<>();
+        for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
+            for (Class<?> iface : c.getInterfaces()) queue.add(iface);
+        }
+        while (!queue.isEmpty()) {
+            Class<?> iface = queue.poll();
+            if (!ifaces.add(iface)) continue;
+            populateReverseFromClass(iface, table);
+            for (Class<?> superIface : iface.getInterfaces()) queue.add(superIface);
+        }
+
+        reverseMethodCache.put(clazz, table);
+        return table;
+    }
+
+    private void populateReverseFromClass(Class<?> c, Map<String, String> table) {
+        String mojangClassName = resolver.unresolveClass(c.getName());
+        for (String sig : resolver.getMethodSignatures(mojangClassName)) {
             String simpleName = ParsedMappings.simpleMethodName(sig);
-            String resolved = resolver.resolveMethod(mojangClassName, simpleName, null);
-            if (resolved.equals(m.getName())) {
-                return simpleName;
+            String runtimeName = resolver.resolveMethod(mojangClassName, simpleName, null);
+            if (!runtimeName.equals(simpleName)) {
+                // First-write-wins so a class higher in the chain (more derived)
+                // doesn't get clobbered by a less-derived ancestor.
+                table.putIfAbsent(runtimeName, simpleName);
             }
         }
-        return m.getName();
     }
+
+    private final Map<Class<?>, Map<String, String>> reverseMethodCache = new ConcurrentHashMap<>();
 
     private String getFieldMojangName(Class<?> declaringClass, Field f) {
         String runtimeClassName = declaringClass.getName();
@@ -684,21 +756,33 @@ public class JavaBridge {
     }
 
     private List<Class<?>> getAllInterfaces(Class<?> clazz) {
-        List<Class<?>> interfaces = new ArrayList<>();
+        // Use BFS to collect ALL interfaces in the hierarchy, no matter how deep.
+        // The old code only recursed one level, missing deeply nested interfaces
+        // like EntityGetter which is 3+ levels deep in Minecraft's hierarchy:
+        //   ClientLevel -> Level -> LevelAccessor -> CommonLevelAccessor -> EntityGetter
+        Set<Class<?>> seen = new LinkedHashSet<>();
+        Deque<Class<?>> queue = new ArrayDeque<>();
+
+        // Seed the queue with direct interfaces from all superclasses
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
             for (Class<?> iface : c.getInterfaces()) {
-                if (!interfaces.contains(iface)) {
-                    interfaces.add(iface);
-                    // Recurse into super-interfaces
-                    for (Class<?> superIface : iface.getInterfaces()) {
-                        if (!interfaces.contains(superIface)) {
-                            interfaces.add(superIface);
-                        }
-                    }
+                if (seen.add(iface)) {
+                    queue.add(iface);
                 }
             }
         }
-        return interfaces;
+
+        // BFS over super-interfaces
+        while (!queue.isEmpty()) {
+            Class<?> iface = queue.poll();
+            for (Class<?> superIface : iface.getInterfaces()) {
+                if (seen.add(superIface)) {
+                    queue.add(superIface);
+                }
+            }
+        }
+
+        return new ArrayList<>(seen);
     }
 
     // Import for ParsedMappings.simpleMethodName

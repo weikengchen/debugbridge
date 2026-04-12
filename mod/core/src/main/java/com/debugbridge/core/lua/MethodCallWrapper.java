@@ -4,8 +4,13 @@ import org.luaj.vm2.*;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Deque;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * A callable Lua function that invokes a Java method via reflection.
@@ -32,14 +37,21 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
         try {
             // Detect and skip the implicit 'self' argument from Lua's ':' call syntax.
             // When called as obj:method(a, b), Lua passes (obj, a, b).
-            // We need to strip the leading 'self' if it matches our target object.
+            // We need to strip the leading 'self' if it matches our target object —
+            // OR, for static calls (target == null), if the first arg is the
+            // class wrapper for our target class (Class:staticMethod() syntax).
             int startIdx = 0;
             int totalArgs = args.narg();
-            if (totalArgs > 0 && target != null) {
+            if (totalArgs > 0) {
                 LuaValue firstArg = args.arg(1);
-                if (firstArg instanceof JavaObjectWrapper wrapper
+                if (target != null
+                        && firstArg instanceof JavaObjectWrapper wrapper
                         && wrapper.getJavaObject() == target) {
-                    startIdx = 1; // skip self
+                    startIdx = 1; // skip self for instance call
+                } else if (target == null
+                        && firstArg instanceof JavaClassWrapper classWrapper
+                        && classWrapper.getJavaClass() == targetClass) {
+                    startIdx = 1; // skip self for static call via Class:method()
                 }
             }
 
@@ -87,17 +99,14 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
     }
 
     private String resolveMethodName() {
-        // Walk class hierarchy trying to resolve through mappings
-        for (Class<?> c = targetClass; c != null; c = c.getSuperclass()) {
+        // Walk the runtime class+interface graph (recursive over super-interfaces).
+        // For each class encountered, ask the resolver to map mojangMethodName on
+        // THAT specific class. The resolver is strict — it won't return matches
+        // from unrelated classes — so we have to do the hierarchy walk ourselves.
+        Set<Class<?>> visited = new LinkedHashSet<>();
+        collectHierarchy(targetClass, visited);
+        for (Class<?> c : visited) {
             String mojClass = bridge.getResolver().unresolveClass(c.getName());
-            String resolved = bridge.getResolver().resolveMethod(mojClass, mojangMethodName, null);
-            if (!resolved.equals(mojangMethodName)) {
-                return resolved;
-            }
-        }
-        // Also check interfaces
-        for (Class<?> iface : getAllInterfaces(targetClass)) {
-            String mojClass = bridge.getResolver().unresolveClass(iface.getName());
             String resolved = bridge.getResolver().resolveMethod(mojClass, mojangMethodName, null);
             if (!resolved.equals(mojangMethodName)) {
                 return resolved;
@@ -106,16 +115,41 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
         return mojangMethodName;
     }
 
-    private List<Class<?>> getAllInterfaces(Class<?> clazz) {
-        List<Class<?>> interfaces = new ArrayList<>();
+    /**
+     * Collect the full ancestor set for {@code clazz}: superclass chain plus all
+     * interfaces (recursive over super-interfaces). Order: classes first
+     * (most-derived to least-derived), then interfaces in BFS order. The
+     * {@link LinkedHashSet} both preserves order and de-duplicates.
+     */
+    static void collectHierarchy(Class<?> clazz, Set<Class<?>> out) {
+        for (Class<?> c = clazz; c != null && c != Object.class; c = c.getSuperclass()) {
+            out.add(c);
+        }
+        // BFS over interfaces from every class in the chain.
+        Deque<Class<?>> queue = new ArrayDeque<>();
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
             for (Class<?> iface : c.getInterfaces()) {
-                if (!interfaces.contains(iface)) {
-                    interfaces.add(iface);
-                }
+                queue.add(iface);
             }
         }
-        return interfaces;
+        while (!queue.isEmpty()) {
+            Class<?> iface = queue.poll();
+            if (!out.add(iface)) continue;
+            for (Class<?> superIface : iface.getInterfaces()) {
+                queue.add(superIface);
+            }
+        }
+    }
+
+    /** Backwards-compat helper kept for {@link #findBestMatch}. */
+    private List<Class<?>> getAllInterfaces(Class<?> clazz) {
+        Set<Class<?>> all = new LinkedHashSet<>();
+        collectHierarchy(clazz, all);
+        List<Class<?>> ifaces = new ArrayList<>();
+        for (Class<?> c : all) {
+            if (c.isInterface()) ifaces.add(c);
+        }
+        return ifaces;
     }
 
     /**
@@ -146,6 +180,14 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
         // Relax: just match by name and arg count (ignore types)
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) {
+                if (m.getName().equals(name) && m.getParameterCount() == nargs) {
+                    return m;
+                }
+            }
+        }
+        // Relaxed pass for interfaces too (was missing before!)
+        for (Class<?> iface : getAllInterfaces(clazz)) {
+            for (Method m : iface.getDeclaredMethods()) {
                 if (m.getName().equals(name) && m.getParameterCount() == nargs) {
                     return m;
                 }
@@ -213,22 +255,57 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
     }
 
     private String suggestMethods() {
-        // Collect available method names for error message
-        List<String> names = new ArrayList<>();
-        for (Class<?> c = targetClass; c != null && c != Object.class; c = c.getSuperclass()) {
+        // Build a list of methods that are visible on the target class, displayed
+        // in Mojang names where the resolver can find them. Walk the full
+        // ancestor graph (classes + interfaces) so inherited and interface-only
+        // methods show up — that's where most useful methods live in MC's deep
+        // entity/item hierarchies.
+        Set<Class<?>> hierarchy = new LinkedHashSet<>();
+        collectHierarchy(targetClass, hierarchy);
+
+        // Group by Mojang method name → set of arities, so we collapse overloads.
+        java.util.Map<String, java.util.Set<Integer>> byName = new java.util.LinkedHashMap<>();
+        // Also track methods whose names start with the requested prefix so we
+        // can surface "did you mean ..." matches first.
+        java.util.List<String> matches = new ArrayList<>();
+        java.util.List<String> others = new ArrayList<>();
+        String wanted = mojangMethodName.toLowerCase();
+
+        for (Class<?> c : hierarchy) {
             for (Method m : c.getDeclaredMethods()) {
-                String mojName = bridge.getResolver().unresolveClass(c.getName());
-                // Just list the runtime names for now
-                String display = m.getName() + "(" + m.getParameterCount() + " args)";
-                if (!names.contains(display) && !Modifier.isPrivate(m.getModifiers())) {
-                    names.add(display);
+                if (Modifier.isPrivate(m.getModifiers())) continue;
+                if (m.isSynthetic()) continue;
+                String displayName = bridge.getMethodMojangName(c, m);
+                // Skip noisy mixin/transformer-injected methods (they have $ in
+                // their names — controlify$..., handler$..., yumi_$..., etc.).
+                if (displayName.indexOf('$') >= 0) continue;
+                int arity = m.getParameterCount();
+                java.util.Set<Integer> arities = byName.computeIfAbsent(
+                    displayName, k -> new java.util.LinkedHashSet<>());
+                if (!arities.add(arity)) continue;
+
+                String entry = displayName + "(" + arity + " args)";
+                if (displayName.toLowerCase().contains(wanted)) {
+                    matches.add(entry);
+                } else {
+                    others.add(entry);
                 }
             }
         }
-        if (names.isEmpty()) return "";
-        if (names.size() > 10) {
-            return "\n  Available methods (first 10): " + String.join(", ", names.subList(0, 10)) + "...";
+
+        if (matches.isEmpty() && others.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        if (!matches.isEmpty()) {
+            int n = Math.min(matches.size(), 10);
+            sb.append("\n  Did you mean: ").append(String.join(", ", matches.subList(0, n)));
+            if (matches.size() > n) sb.append(", ...");
         }
-        return "\n  Available methods: " + String.join(", ", names);
+        if (!others.isEmpty()) {
+            int n = Math.min(others.size(), 10);
+            sb.append("\n  Other methods (first ").append(n).append("): ")
+              .append(String.join(", ", others.subList(0, n)));
+            if (others.size() > n) sb.append(", ...");
+        }
+        return sb.toString();
     }
 }

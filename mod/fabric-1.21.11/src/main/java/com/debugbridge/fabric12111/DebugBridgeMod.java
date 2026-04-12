@@ -7,6 +7,7 @@ import com.debugbridge.core.mapping.MappingDownloader;
 import com.debugbridge.core.mapping.ProGuardParser;
 import com.debugbridge.core.mapping.ParsedMappings;
 import com.debugbridge.core.mapping.MappingResolver;
+import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.server.BridgeServer;
 import com.debugbridge.core.snapshot.GameStateProvider;
 import com.google.gson.JsonObject;
@@ -52,8 +53,11 @@ public class DebugBridgeMod implements ClientModInitializer {
         };
 
         GameStateProvider stateProvider = new Minecraft12111StateProvider();
+        ScreenshotProvider screenshotProvider = new Minecraft12111ScreenshotProvider();
 
-        BridgeServer server = new BridgeServer(config.port, resolver, dispatcher, stateProvider);
+        BridgeServer server = new BridgeServer(config.port, resolver, dispatcher,
+            stateProvider, screenshotProvider);
+        server.setGameDir(FabricLoader.getInstance().getGameDir());
         server.start();
         LOG.info("[DebugBridge] Server started on port {}", config.port);
     }

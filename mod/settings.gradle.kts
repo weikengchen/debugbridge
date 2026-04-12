@@ -9,6 +9,8 @@ pluginManagement {
 rootProject.name = "debugbridge"
 
 include(":core")
+include(":hooks")
+include(":agent")
 // Fabric modules require Loom plugin + compatible Gradle version.
 // Uncomment when building with Gradle 8.x and Fabric Loom.
 include(":fabric-1.19")
