@@ -92,13 +92,14 @@ public class DeveloperWarningScreen extends Screen {
         // Draw title
         drawCenteredString(poseStack, this.font, this.title, this.width / 2, 15, 0xFF5555);
 
-        // Draw warning lines
+        // Draw warning lines (left-aligned with padding)
         int y = 35;
+        int leftPadding = 40;
         for (String line : WARNING_LINES) {
             if (line.isEmpty()) {
                 y += 5;
             } else {
-                drawCenteredString(poseStack, this.font, line, this.width / 2, y, 0xFFFFFF);
+                drawString(poseStack, this.font, line, leftPadding, y, 0xFFFFFF);
                 y += 11;
             }
         }

@@ -8,27 +8,103 @@ export class BridgeSession {
         resolve: (resp: BridgeResponse) => void;
         reject: (err: Error) => void;
     }>();
-    private defaultPort: number;
+    private configuredPort: number;
+    private connectedPort: number | null = null;
+    private autoScan: boolean = true;  // Try scanning ports if default fails
+
+    // Tracked session info for reconnect verification
+    private expectedGameDir: string | null = null;
+    private lastSessionInfo: SessionInfo | null = null;
 
     constructor(defaultPort: number = 9876) {
-        this.defaultPort = defaultPort;
+        this.configuredPort = defaultPort;
+    }
+
+    /** Set port without connecting. Resets expected game instance. */
+    setPort(port: number) {
+        this.configuredPort = port;
+        this.autoScan = false;  // User explicitly set port, don't auto-scan
+        this.expectedGameDir = null;  // Reset expected instance
+    }
+
+    /** Get the currently connected port, or null if not connected */
+    getConnectedPort(): number | null {
+        return this.connectedPort;
+    }
+
+    /** Get last session info (version, paths, etc.) */
+    getSessionInfo(): SessionInfo | null {
+        return this.lastSessionInfo;
     }
 
     async connect(port?: number): Promise<SessionInfo> {
-        const targetPort = port ?? this.defaultPort;
-        this.defaultPort = targetPort; // remember for future auto-connects
+        if (port !== undefined) {
+            this.configuredPort = port;
+            this.autoScan = false;  // Explicit port, don't scan
+            this.expectedGameDir = null;  // Reset expected instance
+        }
+
+        // If auto-scan is enabled, try multiple ports
+        let info: SessionInfo;
+        if (this.autoScan) {
+            info = await this.connectWithScan();
+        } else {
+            info = await this.connectToPort(this.configuredPort);
+        }
+
+        // Verify same game instance on reconnect
+        if (this.expectedGameDir && info.gameDir && info.gameDir !== this.expectedGameDir) {
+            // Different game instance - warn but allow
+            console.error(
+                `[DebugBridge] Warning: Connected to different game instance.\n` +
+                `  Expected: ${this.expectedGameDir}\n` +
+                `  Got: ${info.gameDir}`
+            );
+        }
+
+        // Remember this instance for future reconnects
+        if (info.gameDir) {
+            this.expectedGameDir = info.gameDir;
+        }
+        this.lastSessionInfo = info;
+
+        return info;
+    }
+
+    private async connectWithScan(): Promise<SessionInfo> {
+        const portsToTry = Array.from({ length: 10 }, (_, i) => this.configuredPort + i);
+        let lastError: Error | null = null;
+
+        for (const port of portsToTry) {
+            try {
+                return await this.connectToPort(port);
+            } catch (e) {
+                lastError = e instanceof Error ? e : new Error(String(e));
+                // Continue to next port
+            }
+        }
+
+        throw new Error(
+            `Could not connect to DebugBridge on ports ${this.configuredPort}-${this.configuredPort + 9}. ` +
+            `Is Minecraft running with the mod? Last error: ${lastError?.message}`
+        );
+    }
+
+    private async connectToPort(targetPort: number): Promise<SessionInfo> {
         return new Promise((resolve, reject) => {
             const wsUrl = `ws://127.0.0.1:${targetPort}`;
-            this.ws = new WebSocket(wsUrl);
+            const ws = new WebSocket(wsUrl);
 
             const timeout = setTimeout(() => {
-                this.ws?.close();
-                this.ws = null;
+                ws.close();
                 reject(new Error(`Connection timed out connecting to ${wsUrl}`));
-            }, 5000);
+            }, 2000);  // Shorter timeout for port scanning
 
-            this.ws.on("open", async () => {
+            ws.on("open", async () => {
                 clearTimeout(timeout);
+                this.ws = ws;
+                this.connectedPort = targetPort;
+                this.setupWebSocketHandlers(ws);
                 try {
                     const status = await this.send("status", {});
                     resolve(status.result as SessionInfo);
@@ -37,32 +113,35 @@ export class BridgeSession {
                 }
             });
 
-            this.ws.on("message", (data: WebSocket.RawData) => {
-                try {
-                    const resp: BridgeResponse = JSON.parse(data.toString());
-                    const pending = this.pendingRequests.get(resp.id);
-                    if (pending) {
-                        this.pendingRequests.delete(resp.id);
-                        pending.resolve(resp);
-                    }
-                } catch (e) {
-                    // Ignore malformed messages
-                }
-            });
-
-            this.ws.on("error", (err) => {
+            ws.on("error", (err) => {
                 clearTimeout(timeout);
                 reject(new Error(`WebSocket error: ${err.message}`));
             });
+        });
+    }
 
-            this.ws.on("close", () => {
-                this.ws = null;
-                // Reject all pending requests
-                for (const [id, pending] of this.pendingRequests) {
-                    pending.reject(new Error("Connection closed"));
+    private setupWebSocketHandlers(ws: WebSocket) {
+        ws.on("message", (data: WebSocket.RawData) => {
+            try {
+                const resp: BridgeResponse = JSON.parse(data.toString());
+                const pending = this.pendingRequests.get(resp.id);
+                if (pending) {
+                    this.pendingRequests.delete(resp.id);
+                    pending.resolve(resp);
                 }
-                this.pendingRequests.clear();
-            });
+            } catch (e) {
+                // Ignore malformed messages
+            }
+        });
+
+        ws.on("close", () => {
+            this.ws = null;
+            this.connectedPort = null;
+            // Reject all pending requests
+            for (const [, pending] of this.pendingRequests) {
+                pending.reject(new Error("Connection closed"));
+            }
+            this.pendingRequests.clear();
         });
     }
 
@@ -94,7 +173,17 @@ export class BridgeSession {
             this.ws.close();
             this.ws = null;
         }
+        this.connectedPort = null;
         this.pendingRequests.clear();
+        // Note: we keep expectedGameDir and lastSessionInfo for reconnect verification
+    }
+
+    /** Full reset - clears all state including expected instance */
+    reset() {
+        this.disconnect();
+        this.expectedGameDir = null;
+        this.lastSessionInfo = null;
+        this.autoScan = true;
     }
 
     get isConnected(): boolean {

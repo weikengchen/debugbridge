@@ -14,11 +14,13 @@ import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
 import org.java_websocket.server.WebSocketServer;
 
+import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.regex.Pattern;
@@ -50,6 +52,12 @@ public class BridgeServer extends WebSocketServer {
      * agent module registers itself.
      */
     private volatile LoggerService loggerService = LoggerService.UNAVAILABLE;
+
+    /**
+     * Callback for bind errors (e.g., port already in use). Called from the
+     * WebSocket selector thread when the server fails to bind.
+     */
+    private volatile Consumer<Exception> bindErrorCallback;
 
     public BridgeServer(int port, MappingResolver resolver, ThreadDispatcher dispatcher) {
         this(port, resolver, dispatcher, null, null);
@@ -92,6 +100,14 @@ public class BridgeServer extends WebSocketServer {
         LOG.info("[DebugBridge] Logger service registered: " + service.getClass().getSimpleName());
     }
 
+    /**
+     * Set a callback to be notified if the server fails to bind to the port.
+     * The callback is invoked from the WebSocket selector thread.
+     */
+    public void setBindErrorCallback(Consumer<Exception> callback) {
+        this.bindErrorCallback = callback;
+    }
+
     @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
         LOG.info("[DebugBridge] Client connected: " + conn.getRemoteSocketAddress());
@@ -124,6 +140,14 @@ public class BridgeServer extends WebSocketServer {
     @Override
     public void onError(WebSocket conn, Exception ex) {
         LOG.log(Level.WARNING, "[DebugBridge] WebSocket error", ex);
+        // conn == null means this is a server-level error (e.g., bind failure)
+        if (conn == null && (ex instanceof BindException ||
+                (ex.getCause() != null && ex.getCause() instanceof BindException))) {
+            Consumer<Exception> callback = this.bindErrorCallback;
+            if (callback != null) {
+                callback.accept(ex);
+            }
+        }
     }
 
     @Override

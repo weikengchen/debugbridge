@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { BridgeSession } from "./session.js";
+import { SessionInfo } from "./types.js";
 
 const DEFAULT_PORT = (() => {
     const raw = process.env.DEBUGBRIDGE_PORT;
@@ -18,6 +19,17 @@ const server = new McpServer({
     version: "1.0.0",
 });
 
+/** Format session info for display */
+function formatSessionInfo(info: Partial<SessionInfo>, port: number | null): string {
+    const lines: string[] = [];
+    if (info.version) lines.push(`Minecraft ${info.version}`);
+    if (port) lines.push(`Port: ${port}`);
+    if (info.gameDir) lines.push(`Game dir: ${info.gameDir}`);
+    if (info.latestLog) lines.push(`Log: ${info.latestLog}`);
+    if (info.mappingStatus) lines.push(`Mappings: ${info.mappingStatus}`);
+    return lines.join("\n");
+}
+
 // mc_connect
 server.tool(
     "mc_connect",
@@ -25,17 +37,33 @@ server.tool(
 Optional — other mc_* tools auto-connect if needed. Useful to specify a
 non-default port or to get session info (version, mapping info, paths to
 game directory and log files). Use the Read tool on latestLog / debugLog
-to view game logs.`,
+to view game logs.
+
+If port is not specified, will scan ports ${DEFAULT_PORT}-${DEFAULT_PORT + 9} to find the mod.
+The port and game instance are remembered for auto-reconnect on subsequent calls.`,
     {
-        port: z.number().optional().describe(`WebSocket port the mod is listening on. Default: ${DEFAULT_PORT}`),
+        port: z.number().optional().describe(`WebSocket port. Default: scan ${DEFAULT_PORT}-${DEFAULT_PORT + 9}`),
     },
     async ({ port }) => {
         if (session.isConnected) {
-            return { content: [{ type: "text" as const, text: "Already connected. Use mc_disconnect first." }] };
+            const info = session.getSessionInfo();
+            const connectedPort = session.getConnectedPort();
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `Already connected.\n${formatSessionInfo(info ?? {}, connectedPort)}\n\nUse mc_disconnect first to reconnect.`
+                }]
+            };
         }
         try {
-            const info = await session.connect(port ?? DEFAULT_PORT);
-            return { content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }] };
+            const info = await session.connect(port);
+            const connectedPort = session.getConnectedPort();
+            return {
+                content: [{
+                    type: "text" as const,
+                    text: `Connected!\n${formatSessionInfo(info, connectedPort)}`
+                }]
+            };
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : String(e);
             return { content: [{ type: "text" as const, text: `Connection failed: ${msg}` }], isError: true };
@@ -46,11 +74,19 @@ to view game logs.`,
 // mc_disconnect
 server.tool(
     "mc_disconnect",
-    "Disconnect from the Minecraft instance and clear all state.",
-    {},
-    async () => {
+    `Disconnect from the Minecraft instance. By default, keeps the port and
+game instance remembered for auto-reconnect. Use reset=true to fully clear
+all state (useful when switching to a different Minecraft instance).`,
+    {
+        reset: z.boolean().optional().describe("If true, also clear remembered port and instance info"),
+    },
+    async ({ reset }) => {
+        if (reset) {
+            session.reset();
+            return { content: [{ type: "text" as const, text: "Disconnected and reset all session state." }] };
+        }
         session.disconnect();
-        return { content: [{ type: "text" as const, text: "Disconnected." }] };
+        return { content: [{ type: "text" as const, text: "Disconnected. Will auto-reconnect on next command." }] };
     }
 );
 

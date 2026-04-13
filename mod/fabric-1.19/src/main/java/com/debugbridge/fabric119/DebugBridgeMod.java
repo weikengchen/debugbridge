@@ -18,6 +18,10 @@ import net.minecraft.client.player.LocalPlayer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import net.minecraft.network.chat.Component;
+
+import java.net.InetSocketAddress;
+import java.net.ServerSocket;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -35,6 +39,8 @@ public class DebugBridgeMod implements ClientModInitializer {
     private final AtomicBoolean warningShown = new AtomicBoolean(false);
     private final AtomicBoolean serverStarted = new AtomicBoolean(false);
     private boolean needsWarning = false;
+    private String startupError = null;
+    private String startupInfo = null;  // Info message (e.g., port changed)
 
     @Override
     public void onInitializeClient() {
@@ -64,6 +70,20 @@ public class DebugBridgeMod implements ClientModInitializer {
     }
 
     private void handleTick(Minecraft mc) {
+        // Show startup messages when player is available
+        if (startupError != null && mc.player != null) {
+            mc.player.displayClientMessage(
+                Component.literal("[DebugBridge] " + startupError).withStyle(s -> s.withColor(0xFF5555)),
+                false);
+            startupError = null;
+        }
+        if (startupInfo != null && mc.player != null) {
+            mc.player.displayClientMessage(
+                Component.literal("[DebugBridge] " + startupInfo).withStyle(s -> s.withColor(0x55FF55)),
+                false);
+            startupInfo = null;
+        }
+
         if (!needsWarning) return;
 
         // Only show once, and only when no screen is open (game is ready)
@@ -81,6 +101,9 @@ public class DebugBridgeMod implements ClientModInitializer {
             }));
         }
     }
+
+    private static final int PORT_RANGE_START = 9876;
+    private static final int PORT_RANGE_END = 9886;
 
     private void startServer() {
         if (serverStarted.getAndSet(true)) {
@@ -108,11 +131,77 @@ public class DebugBridgeMod implements ClientModInitializer {
         GameStateProvider stateProvider = new Minecraft119StateProvider();
         ScreenshotProvider screenshotProvider = new Minecraft119ScreenshotProvider();
 
-        server = new BridgeServer(config.port, resolver, dispatcher,
-            stateProvider, screenshotProvider);
-        server.setGameDir(FabricLoader.getInstance().getGameDir());
-        server.start();
-        LOG.info("[DebugBridge] Server started on port {}", config.port);
+        // Find available port and start server
+        int actualPort = startServerOnAvailablePort(config.port, resolver, dispatcher, stateProvider, screenshotProvider);
+
+        if (actualPort == -1) {
+            String msg = "Could not bind to any port in range " + PORT_RANGE_START + "-" + PORT_RANGE_END;
+            LOG.error("[DebugBridge] {}", msg);
+            startupError = msg;
+        } else {
+            if (actualPort != config.port) {
+                startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";
+            }
+            LOG.info("[DebugBridge] Server started on port {}", actualPort);
+        }
+    }
+
+    /**
+     * Try to start server on preferred port, scanning range if needed.
+     * Returns actual port used, or -1 if all ports occupied.
+     */
+    private int startServerOnAvailablePort(int preferredPort, MappingResolver resolver,
+                                           ThreadDispatcher dispatcher, GameStateProvider stateProvider,
+                                           ScreenshotProvider screenshotProvider) {
+        int startPort = Math.max(PORT_RANGE_START, Math.min(PORT_RANGE_END, preferredPort));
+
+        // First pass: preferred port -> end of range
+        for (int port = startPort; port <= PORT_RANGE_END; port++) {
+            if (tryStartOnPort(port, resolver, dispatcher, stateProvider, screenshotProvider)) {
+                return port;
+            }
+        }
+
+        // Second pass (wraparound): start of range -> preferred port
+        for (int port = PORT_RANGE_START; port < startPort; port++) {
+            if (tryStartOnPort(port, resolver, dispatcher, stateProvider, screenshotProvider)) {
+                return port;
+            }
+        }
+
+        return -1;
+    }
+
+    private boolean tryStartOnPort(int port, MappingResolver resolver, ThreadDispatcher dispatcher,
+                                   GameStateProvider stateProvider, ScreenshotProvider screenshotProvider) {
+        LOG.info("[DebugBridge] Checking if port {} is available...", port);
+        if (!isPortAvailable(port)) {
+            LOG.info("[DebugBridge] Port {} is not available, skipping", port);
+            return false;
+        }
+        LOG.info("[DebugBridge] Port {} appears available, starting server...", port);
+
+        try {
+            server = new BridgeServer(port, resolver, dispatcher, stateProvider, screenshotProvider);
+            server.setReuseAddr(true);
+            server.setGameDir(FabricLoader.getInstance().getGameDir());
+            server.start();
+            LOG.info("[DebugBridge] Server.start() called on port {}", port);
+            return true;
+        } catch (Exception e) {
+            LOG.error("[DebugBridge] Failed to start server on port {}", port, e);
+            return false;
+        }
+    }
+
+    private boolean isPortAvailable(int port) {
+        try (ServerSocket socket = new ServerSocket()) {
+            socket.setReuseAddress(true);  // Must be set BEFORE bind
+            socket.bind(new InetSocketAddress("127.0.0.1", port));  // Same address as WebSocketServer
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private MappingResolver buildResolver() {

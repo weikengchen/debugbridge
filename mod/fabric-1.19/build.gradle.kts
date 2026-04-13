@@ -13,7 +13,6 @@ dependencies {
     minecraft("com.mojang:minecraft:1.19")
     mappings(loom.officialMojangMappings())
     modImplementation("net.fabricmc:fabric-loader:0.14.21")
-    modImplementation("net.fabricmc.fabric-api:fabric-api:0.58.0+1.19")
 
     // Include core's dependencies
     include(project(":core"))
