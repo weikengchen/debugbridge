@@ -45,9 +45,11 @@ export interface EntityDetails {
   raw: Record<string, unknown>;
 }
 
-const DESPAWN_LINGER_MS = 3000;
+const DESPAWN_LINGER_MS = 1500;
 const NEW_STATUS_MS = 2000;
 const MAX_ENTITIES = 100;
+const GAZE_POLL_MS = 200;
+const GAZE_RANGE = 64;
 
 export const useEntitiesStore = defineStore('entities', () => {
   const entities = ref<NearbyEntity[]>([]);
@@ -63,12 +65,15 @@ export const useEntitiesStore = defineStore('entities', () => {
   const error = ref<string | null>(null);
   const range = ref<number>(parseInt(localStorage.getItem('debugbridge-entity-range') ?? '10', 10));
   const autoRefreshEnabled = ref(false);
+  const followGazeEnabled = ref(false);
   const sortBy = ref<'distance' | 'type' | 'id'>('distance');
   const viewMode = ref<'list' | 'grid'>(
     (localStorage.getItem('debugbridge-entity-view') as 'list' | 'grid') ?? 'list',
   );
 
   let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let gazeTimer: ReturnType<typeof setInterval> | null = null;
+  let gazeInFlight = false;
 
   const sortedEntities = computed(() => {
     const list = [...entities.value];
@@ -187,8 +192,10 @@ export const useEntitiesStore = defineStore('entities', () => {
         .filter(e => !newIds.has(e.id) && e.status !== 'despawned')
         .map(e => ({ ...e, status: 'despawned' as const, lastSeen: now }));
 
+      // Exclude any previously-despawned entity that came back in the new list —
+      // otherwise it would appear twice (once alive, once as a lingering ghost).
       const stillLingering = entities.value
-        .filter(e => e.status === 'despawned' && (now - e.lastSeen) < DESPAWN_LINGER_MS);
+        .filter(e => e.status === 'despawned' && !newIds.has(e.id) && (now - e.lastSeen) < DESPAWN_LINGER_MS);
 
       entities.value = [...newList, ...despawned, ...stillLingering];
 
@@ -316,6 +323,45 @@ export const useEntitiesStore = defineStore('entities', () => {
     }
   }
 
+  async function fetchLookedAtEntity(): Promise<void> {
+    if (gazeInFlight) return;
+    gazeInFlight = true;
+    try {
+      const id = await bridge.getLookedAtEntity(GAZE_RANGE);
+      if (id !== null && id !== selectedEntityId.value) {
+        selectEntity(id);
+      }
+    } catch {
+      // Ignore transient errors during polling
+    } finally {
+      gazeInFlight = false;
+    }
+  }
+
+  function startFollowGaze() {
+    if (gazeTimer) return;
+    followGazeEnabled.value = true;
+    fetchLookedAtEntity();
+    gazeTimer = setInterval(() => fetchLookedAtEntity(), GAZE_POLL_MS);
+  }
+
+  function stopFollowGaze() {
+    followGazeEnabled.value = false;
+    if (gazeTimer) {
+      clearInterval(gazeTimer);
+      gazeTimer = null;
+    }
+  }
+
+  function clearEntityPrimaryTextureCache() {
+    entityPrimaryTextures.value = {};
+  }
+
+  async function refreshEntities(): Promise<void> {
+    clearEntityPrimaryTextureCache();
+    await fetchEntities();
+  }
+
   return {
     entities,
     sortedEntities,
@@ -329,17 +375,23 @@ export const useEntitiesStore = defineStore('entities', () => {
     error,
     range,
     autoRefreshEnabled,
+    followGazeEnabled,
     sortBy,
     viewMode,
     setRange,
     setViewMode,
     fetchEntities,
+    refreshEntities,
     fetchEntityDetails,
     fetchEntityPrimaryTextureCached,
     entityPrimaryKey,
+    clearEntityPrimaryTextureCache,
     selectEntity,
     startAutoRefresh,
     stopAutoRefresh,
+    startFollowGaze,
+    stopFollowGaze,
+    fetchLookedAtEntity,
   };
 });
 

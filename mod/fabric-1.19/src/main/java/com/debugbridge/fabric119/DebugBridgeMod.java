@@ -134,6 +134,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         ScreenshotProvider screenshotProvider = new Minecraft119ScreenshotProvider();
         NearbyEntitiesProvider entitiesProvider = new Minecraft119NearbyEntitiesProvider();
         ItemTextureProvider textureProvider = new Minecraft119ItemTextureProvider();
+        Minecraft119LookedAtEntityProvider lookedAtProvider = new Minecraft119LookedAtEntityProvider();
 
         // Find available port and start server
         int actualPort = startServerOnAvailablePort(config.port, resolver, dispatcher, stateProvider, screenshotProvider);
@@ -145,6 +146,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         } else {
             server.setEntitiesProvider(entitiesProvider);
             server.setTextureProvider(textureProvider);
+            server.setLookedAtEntityProvider(lookedAtProvider);
 
             if (actualPort != config.port) {
                 startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";

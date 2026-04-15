@@ -8,6 +8,7 @@ import com.debugbridge.core.protocol.BridgeRequest;
 import com.debugbridge.core.protocol.BridgeResponse;
 import com.debugbridge.core.refs.ObjectRefStore;
 import com.debugbridge.core.entity.ClientEntityGlowManager;
+import com.debugbridge.core.entity.LookedAtEntityProvider;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.snapshot.GameStateProvider;
@@ -65,6 +66,12 @@ public class BridgeServer extends WebSocketServer {
      * Nearby entities query provider. Set by the version-specific module.
      */
     private volatile NearbyEntitiesProvider entitiesProvider;
+
+    /**
+     * Raycast-based "what is the player aiming at" provider. Set by the
+     * version-specific module.
+     */
+    private volatile LookedAtEntityProvider lookedAtEntityProvider;
 
     /**
      * Callback for bind errors (e.g., port already in use). Called from the
@@ -129,6 +136,15 @@ public class BridgeServer extends WebSocketServer {
     public void setEntitiesProvider(NearbyEntitiesProvider provider) {
         this.entitiesProvider = provider;
         LOG.info("[DebugBridge] Entities provider registered: " + provider.getClass().getSimpleName());
+    }
+
+    /**
+     * Register the looked-at entity provider. Called by the version-specific
+     * module during initialization.
+     */
+    public void setLookedAtEntityProvider(LookedAtEntityProvider provider) {
+        this.lookedAtEntityProvider = provider;
+        LOG.info("[DebugBridge] Looked-at entity provider registered: " + provider.getClass().getSimpleName());
     }
 
     /**
@@ -200,6 +216,7 @@ public class BridgeServer extends WebSocketServer {
                 case "getItemTextureById" -> handleGetItemTextureById(req);
                 case "nearbyEntities" -> handleNearbyEntities(req);
                 case "entityDetails" -> handleEntityDetails(req);
+                case "lookedAtEntity" -> handleLookedAtEntity(req);
                 case "setEntityGlow" -> handleSetEntityGlow(req);
                 case "injectLogger" -> handleInjectLogger(req);
                 case "cancelLogger" -> handleCancelLogger(req);
@@ -513,6 +530,28 @@ public class BridgeServer extends WebSocketServer {
         } catch (Exception e) {
             return BridgeResponse.error(req.id,
                 "Entity details query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleLookedAtEntity(BridgeRequest req) {
+        if (lookedAtEntityProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No looked-at entity provider configured for this Minecraft version.");
+        }
+        double range = (req.payload != null && req.payload.has("range"))
+            ? req.payload.get("range").getAsDouble() : 64.0;
+        try {
+            Integer id = lookedAtEntityProvider.getLookedAtEntity(range);
+            JsonObject result = new JsonObject();
+            if (id != null) {
+                result.addProperty("entityId", id);
+            } else {
+                result.add("entityId", JsonNull.INSTANCE);
+            }
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Looked-at entity query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 

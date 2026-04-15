@@ -39,6 +39,7 @@ function entityThumbUrl(e: NearbyEntity): string | undefined {
 
 onUnmounted(() => {
   entities.stopAutoRefresh()
+  entities.stopFollowGaze()
 })
 
 function toggleAutoRefresh() {
@@ -46,6 +47,14 @@ function toggleAutoRefresh() {
     entities.stopAutoRefresh()
   } else {
     entities.startAutoRefresh()
+  }
+}
+
+function toggleFollowGaze() {
+  if (entities.followGazeEnabled) {
+    entities.stopFollowGaze()
+  } else {
+    entities.startFollowGaze()
   }
 }
 
@@ -138,7 +147,7 @@ const rawTreeExpanded = ref(false)
     <!-- Toolbar -->
     <div class="p-3 border-b border-zinc-800 flex items-center gap-3 flex-wrap">
       <button
-        @click="entities.fetchEntities"
+        @click="entities.refreshEntities"
         :disabled="!connection.isConnected || entities.isLoading"
         class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded-md text-sm disabled:opacity-50 transition-colors"
       >
@@ -154,6 +163,18 @@ const rawTreeExpanded = ref(false)
           : 'bg-zinc-800 hover:bg-zinc-700'"
       >
         {{ entities.autoRefreshEnabled ? '● Auto' : '○ Auto' }}
+      </button>
+
+      <button
+        @click="toggleFollowGaze"
+        :disabled="!connection.isConnected"
+        class="px-3 py-1.5 rounded-md text-sm transition-colors"
+        :class="entities.followGazeEnabled
+          ? 'bg-amber-800 hover:bg-amber-700 text-amber-200'
+          : 'bg-zinc-800 hover:bg-zinc-700'"
+        title="Auto-select the entity the player is looking at"
+      >
+        {{ entities.followGazeEnabled ? '◉ Gaze' : '○ Gaze' }}
       </button>
 
       <div class="flex items-center gap-2 text-sm">

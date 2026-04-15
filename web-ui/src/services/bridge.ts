@@ -259,6 +259,13 @@ class BridgeService {
     if (!resp.success) throw new Error(resp.error || 'Entity details failed');
     return resp.result as Record<string, unknown>;
   }
+
+  async getLookedAtEntity(range: number): Promise<number | null> {
+    const resp = await this.send('lookedAtEntity', { range });
+    if (!resp.success) throw new Error(resp.error || 'Looked-at entity query failed');
+    const result = resp.result as { entityId: number | null };
+    return result.entityId;
+  }
 }
 
 // Singleton instance
