@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #e4e4e7;
+  background-color: #0f0f17;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #16161f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+}
+
+/* Monaco editor container */
+.monaco-container {
+  height: 100%;
+  width: 100%;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+/* Object tree styling */
+.object-key {
+  @apply text-blue-300;
+}
+
+.object-value-string {
+  @apply text-green-300;
+}
+
+.object-value-number {
+  @apply text-yellow-300;
+}
+
+.object-value-boolean {
+  @apply text-pink-300;
+}
+
+.object-value-null {
+  @apply text-zinc-500 italic;
+}
+
+.object-type {
+  @apply text-purple-400 text-xs;
+}
+
+/* Panel styling */
+.panel {
+  @apply bg-zinc-900/50 border border-zinc-800 rounded-lg;
+}
+
+.panel-header {
+  @apply px-4 py-2 border-b border-zinc-800 flex items-center justify-between;
+}
+
+.panel-title {
+  @apply text-sm font-medium text-zinc-300;
+}
+
+.panel-body {
+  @apply p-4;
+}
+
+/* Button styles */
+.btn {
+  @apply px-3 py-1.5 rounded-md text-sm font-medium transition-colors;
+}
+
+.btn-primary {
+  @apply bg-green-600 hover:bg-green-500 text-white;
+}
+
+.btn-secondary {
+  @apply bg-zinc-700 hover:bg-zinc-600 text-zinc-200;
+}
+
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-500 text-white;
+}
+
+/* Status indicator */
+.status-dot {
+  @apply w-2 h-2 rounded-full;
+}
+
+.status-connected {
+  @apply bg-green-500 shadow-lg shadow-green-500/50;
+}
+
+.status-disconnected {
+  @apply bg-zinc-500;
+}
+
+.status-connecting {
+  @apply bg-yellow-500 animate-pulse;
+}
+
+/* Tree expand/collapse */
+.tree-toggle {
+  @apply w-4 h-4 flex items-center justify-center text-zinc-500 hover:text-zinc-300 cursor-pointer select-none;
+}
+
+/* Console output */
+.console-output {
+  @apply font-mono text-sm whitespace-pre-wrap;
+}
+
+.console-stdout {
+  @apply text-zinc-300;
+}
+
+.console-error {
+  @apply text-red-400;
+}
+
+.console-result {
+  @apply text-green-400;
+}

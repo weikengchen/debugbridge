@@ -84,11 +84,12 @@ public class DeveloperWarningScreen extends Screen {
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        // Darken background
-        this.renderBackground(graphics, mouseX, mouseY, partialTick);
+        // Flat dark background (avoid renderBackground which triggers blur
+        // and can crash with "Can only blur once per frame" on some mod setups)
+        graphics.fill(0, 0, this.width, this.height, 0xC0000000);
 
         // Draw title
-        graphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 0xFF5555);
+        graphics.drawCenteredString(this.font, this.title, this.width / 2, 15, 0xFFFF5555);
 
         // Draw warning lines (left-aligned with padding)
         int y = 35;
@@ -97,7 +98,7 @@ public class DeveloperWarningScreen extends Screen {
             if (line.isEmpty()) {
                 y += 5;
             } else {
-                graphics.drawString(this.font, line, leftPadding, y, 0xFFFFFF);
+                graphics.drawString(this.font, line, leftPadding, y, 0xFFFFFFFF);
                 y += 11;
             }
         }

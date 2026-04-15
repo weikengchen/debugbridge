@@ -11,7 +11,9 @@ DebugBridge exposes a localhost-only WebSocket server (default port 9876) that a
 - **Automate testing** - Script complex game scenarios for mod development or QA
 - **Build AI integrations** - Enable AI assistants to understand and interact with the game world
 
-The primary use case is integration with [Claude Code](https://claude.ai/claude-code) and other AI coding assistants via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/). An MCP server is included that exposes high-level tools like `mc_execute`, `mc_snapshot`, `mc_screenshot`, and `mc_search`.
+The primary use case is integration with [Claude Code](https://claude.ai/claude-code) and other AI coding assistants via the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/).
+
+> **Note:** The MCP server has been merged into [mcdev-mcp](https://github.com/weikengchen/mcdev-mcp), which provides both runtime interaction tools (from DebugBridge) and static code analysis tools (decompiled source search, call graphs, etc.). This repository now contains only the Minecraft Fabric mod.
 
 ## How It Works
 
@@ -24,13 +26,14 @@ The primary use case is integration with [Claude Code](https://claude.ai/claude-
 +---------------------+---------------------------------------+
                       | MCP Protocol (stdio)
 +---------------------v---------------------------------------+
-|  MCP Server (TypeScript)                                     |
-|  - Exposes mc_execute, mc_snapshot, mc_screenshot, etc.     |
-|  - Translates MCP calls to WebSocket messages               |
+|  mcdev-mcp Server (TypeScript)                               |
+|  - Runtime tools: mc_execute, mc_snapshot, mc_screenshot    |
+|  - Static tools: mc_get_class, mc_search_source, mc_find_refs|
+|  - See: https://github.com/weikengchen/mcdev-mcp            |
 +---------------------+---------------------------------------+
                       | WebSocket (localhost:9876)
 +---------------------v---------------------------------------+
-|  DebugBridge Mod (inside Minecraft JVM)                      |
+|  DebugBridge Mod (inside Minecraft JVM) [THIS REPOSITORY]    |
 |  - LuaJ interpreter with Java reflection bridge             |
 |  - Mojang mapping resolver (auto-downloaded)                |
 |  - Thread dispatcher for game-thread safety                 |
@@ -98,21 +101,7 @@ The core mod that runs inside Minecraft:
 - `fabric-1.19/` - Fabric mod for Minecraft 1.19.x
 - `fabric-1.21.11/` - Fabric mod for Minecraft 1.21.11
 
-### 2. MCP Server (`mcp-server/`)
-
-A TypeScript server implementing the Model Context Protocol:
-
-| Tool | Description |
-|------|-------------|
-| `mc_connect` | Connect to a running Minecraft instance |
-| `mc_disconnect` | Disconnect and clear state |
-| `mc_execute` | Execute Lua code in the game |
-| `mc_search` | Search for classes/methods/fields by regex |
-| `mc_snapshot` | Get structured game state (player, world, time) |
-| `mc_screenshot` | Capture the game window as JPEG |
-| `mc_run_command` | Execute a slash command |
-
-### 3. Agent Module (`mod/agent/`, `mod/hooks/`)
+### 2. Agent Module (`mod/agent/`, `mod/hooks/`)
 
 Optional runtime instrumentation for advanced debugging:
 - Inject logging into arbitrary methods at runtime
@@ -126,11 +115,6 @@ Optional runtime instrumentation for advanced debugging:
 # Build the Fabric mods
 cd mod
 ./gradlew build
-
-# Build the MCP server
-cd ../mcp-server
-npm install
-npm run build
 ```
 
 Output JARs are in `mod/fabric-*/build/libs/`.
@@ -139,23 +123,9 @@ Output JARs are in `mod/fabric-*/build/libs/`.
 
 ### With Claude Code / MCP
 
-Add to your Claude Code MCP configuration:
-
-```json
-{
-  "mcpServers": {
-    "minecraft": {
-      "command": "node",
-      "args": ["/path/to/mcp-server/dist/index.js"]
-    }
-  }
-}
-```
-
-Then ask Claude to interact with your game:
-- "What's my current position in Minecraft?"
-- "List all entities within 20 blocks"
-- "Take a screenshot of the game"
+See [mcdev-mcp](https://github.com/weikengchen/mcdev-mcp) for the MCP server setup. The combined server provides:
+- **Runtime tools** (require this mod running): `mc_connect`, `mc_execute`, `mc_snapshot`, `mc_screenshot`, `mc_run_command`, `mc_search_mappings`
+- **Static tools** (work offline): `mc_get_class`, `mc_get_method`, `mc_search_source`, `mc_find_refs`, `mc_find_hierarchy`
 
 ### Direct WebSocket
 

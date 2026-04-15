@@ -7,8 +7,11 @@ import com.debugbridge.core.mapping.MappingResolver;
 import com.debugbridge.core.protocol.BridgeRequest;
 import com.debugbridge.core.protocol.BridgeResponse;
 import com.debugbridge.core.refs.ObjectRefStore;
+import com.debugbridge.core.entity.ClientEntityGlowManager;
+import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.snapshot.GameStateProvider;
+import com.debugbridge.core.texture.ItemTextureProvider;
 import com.google.gson.*;
 import org.java_websocket.WebSocket;
 import org.java_websocket.handshake.ClientHandshake;
@@ -52,6 +55,16 @@ public class BridgeServer extends WebSocketServer {
      * agent module registers itself.
      */
     private volatile LoggerService loggerService = LoggerService.UNAVAILABLE;
+
+    /**
+     * Item texture resolver. Set by the version-specific module.
+     */
+    private volatile ItemTextureProvider textureProvider;
+
+    /**
+     * Nearby entities query provider. Set by the version-specific module.
+     */
+    private volatile NearbyEntitiesProvider entitiesProvider;
 
     /**
      * Callback for bind errors (e.g., port already in use). Called from the
@@ -98,6 +111,24 @@ public class BridgeServer extends WebSocketServer {
     public void setLoggerService(LoggerService service) {
         this.loggerService = service;
         LOG.info("[DebugBridge] Logger service registered: " + service.getClass().getSimpleName());
+    }
+
+    /**
+     * Register the item texture provider. Called by the version-specific module
+     * during initialization.
+     */
+    public void setTextureProvider(ItemTextureProvider provider) {
+        this.textureProvider = provider;
+        LOG.info("[DebugBridge] Texture provider registered: " + provider.getClass().getSimpleName());
+    }
+
+    /**
+     * Register the nearby entities provider. Called by the version-specific module
+     * during initialization.
+     */
+    public void setEntitiesProvider(NearbyEntitiesProvider provider) {
+        this.entitiesProvider = provider;
+        LOG.info("[DebugBridge] Entities provider registered: " + provider.getClass().getSimpleName());
     }
 
     /**
@@ -164,6 +195,12 @@ public class BridgeServer extends WebSocketServer {
                 case "screenshot" -> handleScreenshot(req);
                 case "runCommand" -> handleRunCommand(req);
                 case "status" -> handleStatus(req);
+                case "getItemTexture" -> handleGetItemTexture(req);
+                case "getEntityItemTexture" -> handleGetEntityItemTexture(req);
+                case "getItemTextureById" -> handleGetItemTextureById(req);
+                case "nearbyEntities" -> handleNearbyEntities(req);
+                case "entityDetails" -> handleEntityDetails(req);
+                case "setEntityGlow" -> handleSetEntityGlow(req);
                 case "injectLogger" -> handleInjectLogger(req);
                 case "cancelLogger" -> handleCancelLogger(req);
                 case "listLoggers" -> handleListLoggers(req);
@@ -341,6 +378,152 @@ public class BridgeServer extends WebSocketServer {
         JsonObject payload = new JsonObject();
         payload.addProperty(key, value);
         return payload;
+    }
+
+    // ==================== Item Texture Handler ====================
+
+    private BridgeResponse handleGetItemTexture(BridgeRequest req) {
+        if (textureProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No texture provider configured for this Minecraft version.");
+        }
+
+        int slot = req.payload.get("slot").getAsInt();
+        try {
+            ItemTextureProvider.TextureResult tex = textureProvider.getItemTexture(slot);
+            JsonObject result = new JsonObject();
+            result.addProperty("base64Png", tex.base64Png());
+            result.addProperty("width", tex.width());
+            result.addProperty("height", tex.height());
+            result.addProperty("spriteName", tex.spriteName());
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Texture extraction failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleGetEntityItemTexture(BridgeRequest req) {
+        if (textureProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No texture provider configured for this Minecraft version.");
+        }
+
+        int entityId = req.payload.get("entityId").getAsInt();
+        String slot = req.payload.get("slot").getAsString();
+        try {
+            ItemTextureProvider.TextureResult tex = textureProvider.getEntityItemTexture(entityId, slot);
+            JsonObject result = new JsonObject();
+            result.addProperty("base64Png", tex.base64Png());
+            result.addProperty("width", tex.width());
+            result.addProperty("height", tex.height());
+            result.addProperty("spriteName", tex.spriteName());
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Entity texture extraction failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleGetItemTextureById(BridgeRequest req) {
+        if (textureProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No texture provider configured for this Minecraft version.");
+        }
+
+        String itemId = req.payload.get("itemId").getAsString();
+        try {
+            ItemTextureProvider.TextureResult tex = textureProvider.getItemTextureById(itemId);
+            JsonObject result = new JsonObject();
+            result.addProperty("base64Png", tex.base64Png());
+            result.addProperty("width", tex.width());
+            result.addProperty("height", tex.height());
+            result.addProperty("spriteName", tex.spriteName());
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Item texture extraction failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    // ==================== Nearby Entities Handlers ====================
+
+    private BridgeResponse handleNearbyEntities(BridgeRequest req) {
+        if (entitiesProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No entities provider configured for this Minecraft version.");
+        }
+
+        double range = req.payload.has("range") ? req.payload.get("range").getAsDouble() : 64.0;
+        int limit = req.payload.has("limit") ? req.payload.get("limit").getAsInt() : 100;
+        try {
+            JsonArray entities = entitiesProvider.getNearbyEntities(range, limit);
+            // Map intermediary class names to Mojang names
+            for (int i = 0; i < entities.size(); i++) {
+                JsonObject obj = entities.get(i).getAsJsonObject();
+                if (obj.has("type")) {
+                    String mapped = resolver.unresolveClass(obj.get("type").getAsString());
+                    if (mapped != null) obj.addProperty("type", mapped);
+                }
+            }
+            JsonObject result = new JsonObject();
+            result.add("entities", entities);
+            result.addProperty("count", entities.size());
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Nearby entities query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleEntityDetails(BridgeRequest req) {
+        if (entitiesProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No entities provider configured for this Minecraft version.");
+        }
+
+        int entityId = req.payload.get("entityId").getAsInt();
+        try {
+            JsonObject details = entitiesProvider.getEntityDetails(entityId);
+            if (details == null) {
+                JsonObject gone = new JsonObject();
+                gone.addProperty("gone", true);
+                return BridgeResponse.success(req.id, gone, null);
+            }
+            // Map intermediary class names to Mojang names
+            if (details.has("type")) {
+                String mapped = resolver.unresolveClass(details.get("type").getAsString());
+                if (mapped != null) details.addProperty("type", mapped);
+            }
+            if (details.has("vehicle")) {
+                String mapped = resolver.unresolveClass(details.get("vehicle").getAsString());
+                if (mapped != null) details.addProperty("vehicle", mapped);
+            }
+            if (details.has("passengers")) {
+                JsonArray passengers = details.getAsJsonArray("passengers");
+                JsonArray mapped = new JsonArray();
+                for (int i = 0; i < passengers.size(); i++) {
+                    String original = passengers.get(i).getAsString();
+                    String m = resolver.unresolveClass(original);
+                    mapped.add(m != null ? m : original);
+                }
+                details.add("passengers", mapped);
+            }
+            return BridgeResponse.success(req.id, details, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Entity details query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleSetEntityGlow(BridgeRequest req) {
+        int entityId = req.payload.get("entityId").getAsInt();
+        boolean glow = req.payload.get("glow").getAsBoolean();
+        ClientEntityGlowManager.setGlow(entityId, glow);
+        JsonObject result = new JsonObject();
+        result.addProperty("entityId", entityId);
+        result.addProperty("glow", glow);
+        return BridgeResponse.success(req.id, result, null);
     }
 
     // ==================== Logger Injection Handlers ====================

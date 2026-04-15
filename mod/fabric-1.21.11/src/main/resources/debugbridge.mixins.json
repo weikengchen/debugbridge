@@ -3,7 +3,8 @@
     "package": "com.debugbridge.fabric12111.mixin",
     "compatibilityLevel": "JAVA_21",
     "client": [
-        "MinecraftClientMixin"
+        "MinecraftClientMixin",
+        "EntityGlowMixin"
     ],
     "injectors": {
         "defaultRequire": 1

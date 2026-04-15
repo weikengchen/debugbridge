@@ -6,8 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOD_DIR="${SCRIPT_DIR}/mod"
 TARGET_DIR="/Users/cusgadmin/Library/Application Support/ModrinthApp/profiles/Fabric 1.19/mods/"
 
-JAR_NAME="debugbridge-1.19-1.0.0.jar"
-OLD_JAR_NAMES=("luabridge-1.19-1.0.0.jar" "fabric-1.19-1.0.0.jar")
+JAR_NAME="debugbridge-1.19-1.1.0.jar"
+OLD_JAR_NAMES=("luabridge-1.19-1.0.0.jar" "fabric-1.19-1.0.0.jar" "debugbridge-1.19-1.0.0.jar")
 SOURCE_JAR="${MOD_DIR}/fabric-1.19/build/libs/${JAR_NAME}"
 TARGET_JAR="${TARGET_DIR}/${JAR_NAME}"
 

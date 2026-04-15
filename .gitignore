@@ -69,6 +69,9 @@ Desktop.ini
 *.pem
 *.key
 
+# Claude Code local config (launch profiles, settings)
+.claude/
+
 # --- Logs ------------------------------------------------------------------
 *.log
 logs/

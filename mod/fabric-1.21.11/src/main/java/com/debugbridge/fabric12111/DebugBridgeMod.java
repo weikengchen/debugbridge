@@ -10,6 +10,7 @@ import com.debugbridge.core.mapping.MappingResolver;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.server.BridgeServer;
 import com.debugbridge.core.snapshot.GameStateProvider;
+import com.debugbridge.core.texture.ItemTextureProvider;
 import com.google.gson.JsonObject;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
@@ -130,6 +131,8 @@ public class DebugBridgeMod implements ClientModInitializer {
 
         GameStateProvider stateProvider = new Minecraft12111StateProvider();
         ScreenshotProvider screenshotProvider = new Minecraft12111ScreenshotProvider();
+        ItemTextureProvider textureProvider = new Minecraft12111ItemTextureProvider();
+        Minecraft12111NearbyEntitiesProvider entitiesProvider = new Minecraft12111NearbyEntitiesProvider();
 
         // Find available port and start server
         int actualPort = startServerOnAvailablePort(config.port, resolver, dispatcher, stateProvider, screenshotProvider);
@@ -139,6 +142,10 @@ public class DebugBridgeMod implements ClientModInitializer {
             LOG.error("[DebugBridge] {}", msg);
             startupError = msg;
         } else {
+            // Register providers (use setters to avoid widening constructor)
+            server.setTextureProvider(textureProvider);
+            server.setEntitiesProvider(entitiesProvider);
+
             if (actualPort != config.port) {
                 startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";
             }

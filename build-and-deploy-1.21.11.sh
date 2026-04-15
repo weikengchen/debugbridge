@@ -6,9 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOD_DIR="${SCRIPT_DIR}/mod"
 TARGET_DIR="/Users/cusgadmin/Library/Application Support/ModrinthApp/profiles/ImagineFun/mods/"
 
-JAR_NAME="debugbridge-1.21.11-1.0.0.jar"
+JAR_NAME="debugbridge-1.21.11-1.1.0.jar"
 # Cleanup list: any older names we've produced for this module.
-OLD_JAR_NAMES=("luabridge-1.21.11-1.0.0.jar" "fabric-1.21.11-1.0.0.jar")
+OLD_JAR_NAMES=("luabridge-1.21.11-1.0.0.jar" "fabric-1.21.11-1.0.0.jar" "debugbridge-1.21.11-1.0.0.jar")
 SOURCE_JAR="${MOD_DIR}/fabric-1.21.11/build/libs/${JAR_NAME}"
 TARGET_JAR="${TARGET_DIR}/${JAR_NAME}"
 

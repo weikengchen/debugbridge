@@ -1,0 +1,267 @@
+import { defineStore } from 'pinia';
+import { ref } from 'vue';
+import { bridge } from '../services/bridge';
+
+export interface InventoryItem {
+  slot: number;
+  id: string;         // e.g. "minecraft:diamond_sword"
+  name: string;       // short name e.g. "diamond_sword"
+  count: number;
+  damage: number;
+  maxDamage: number;
+  enchantments?: string[];
+  customName?: string;
+  lore?: string[];
+  components?: Record<string, string>;
+  textureUrl?: string;
+  spriteName?: string;
+}
+
+export const useInventoryStore = defineStore('inventory', () => {
+  const slots = ref<(InventoryItem | null)[]>(new Array(41).fill(null));
+  const selectedSlot = ref<number | null>(null);
+  const isLoading = ref(false);
+  const error = ref<string | null>(null);
+
+  async function fetchInventory(): Promise<void> {
+    isLoading.value = true;
+    error.value = null;
+
+    try {
+      // getDescriptionId() is fast and returns proper MC item names
+      const code = `
+        local mc = java.import("net.minecraft.client.Minecraft"):getInstance()
+        local inv = mc.player:getInventory()
+        local items = inv.items
+        local lines = {}
+        for i = 0, items:size() - 1 do
+          local stack = items:get(i)
+          if not stack:isEmpty() then
+            table.insert(lines, i .. "|" .. tostring(stack:getItem():getDescriptionId()) .. "|" .. stack:getCount())
+          end
+        end
+        return table.concat(lines, "\\n")
+      `;
+
+      const resp = await bridge.execute(code);
+      if (!resp.success) {
+        throw new Error(resp.error || 'Failed to fetch inventory');
+      }
+
+      const raw = unwrapValue(resp.result);
+      const text = typeof raw === 'string' ? raw : String(raw ?? '');
+      const newSlots: (InventoryItem | null)[] = new Array(41).fill(null);
+
+      for (const line of text.split('\n')) {
+        if (!line) continue;
+        const [slotStr, descId, countStr] = line.split('|');
+        const slotIdx = parseInt(slotStr, 10);
+        if (isNaN(slotIdx)) continue;
+        // descId like "item.minecraft.diamond_shovel" or "block.minecraft.pink_shulker_box"
+        const parts = descId.split('.');
+        const name = parts[parts.length - 1] || descId;
+        const mcId = parts.length >= 2 ? `minecraft:${name}` : descId;
+        newSlots[slotIdx] = {
+          slot: slotIdx,
+          id: mcId,
+          name,
+          count: parseInt(countStr, 10) || 1,
+          damage: 0,
+          maxDamage: 0,
+        };
+      }
+
+      slots.value = newSlots;
+
+      // Fetch textures for all non-empty slots in the background
+      fetchAllTextures(newSlots);
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : String(e);
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function fetchAllTextures(items: (InventoryItem | null)[]): Promise<void> {
+    const nonEmpty = items.filter((it): it is InventoryItem => it !== null);
+    // Fetch in parallel but don't block the UI
+    await Promise.allSettled(
+      nonEmpty.map(async (item) => {
+        try {
+          const tex = await bridge.getItemTexture(item.slot);
+          item.textureUrl = `data:image/png;base64,${tex.base64Png}`;
+          item.spriteName = tex.spriteName;
+        } catch {
+          // Texture not available for this item
+        }
+      })
+    );
+    slots.value = [...slots.value];
+  }
+
+  async function fetchItemDetails(slotIdx: number): Promise<void> {
+    const item = slots.value[slotIdx];
+    if (!item) return;
+
+    try {
+      const code = `
+        local mc = java.import("net.minecraft.client.Minecraft"):getInstance()
+        local inv = mc.player:getInventory()
+        local stack = inv:getItem(${slotIdx})
+        if stack == nil or stack:isEmpty() then return {empty = true} end
+
+        local result = {}
+
+        -- Display name
+        local nok, hoverName = pcall(function() return tostring(stack:getHoverName():getString()) end)
+        if nok and hoverName then
+          result.displayName = hoverName
+        end
+
+        -- Components: encode each via codec -> NbtOps -> SNBT
+        local cok, comps = pcall(function() return stack:getComponents() end)
+        if cok and comps ~= nil then
+          local NbtOps = java.import("net.minecraft.nbt.NbtOps")
+          local compMap = {}
+          local iter_ok, iter = pcall(java.iter, comps)
+          if iter_ok then
+            for comp in iter do
+              local tok, key, val = pcall(function()
+                local ctype = comp:type()
+                local cval = comp:value()
+                local typeName = tostring(ctype:toString())
+                local codec = ctype:codecOrThrow()
+                local encoded = codec:encodeStart(NbtOps.INSTANCE, cval)
+                local optResult = encoded:result()
+                if not java.isNull(optResult) and optResult:isPresent() then
+                  return typeName, tostring(optResult:get():toString())
+                else
+                  return typeName, tostring(cval)
+                end
+              end)
+              if tok then
+                compMap[key] = val
+              end
+            end
+          end
+          result.components = compMap
+        end
+
+        -- Enchantments
+        local eok, enchStr = pcall(function()
+          local DataComponents = java.import("net.minecraft.core.component.DataComponents")
+          local enchComp = stack:get(DataComponents.ENCHANTMENTS)
+          if enchComp == nil then return nil end
+          local elist = {}
+          local iter_ok, iter = pcall(java.iter, enchComp:entrySet())
+          if iter_ok then
+            for entry in iter do
+              local name = tostring(entry:getKey():value():toString())
+              local level = entry:getIntValue()
+              table.insert(elist, name .. " " .. tostring(level))
+            end
+          end
+          return elist
+        end)
+        if eok and enchStr then
+          result.enchantments = enchStr
+        end
+
+        return result
+      `;
+
+      const resp = await bridge.execute(code);
+      if (!resp.success) return;
+
+      const data = unwrapValue(resp.result) as Record<string, unknown>;
+      if (data.empty) return;
+
+      if (data.displayName) {
+        item.customName = String(data.displayName);
+      }
+
+      if (data.enchantments && Array.isArray(data.enchantments)) {
+        item.enchantments = (data.enchantments as unknown[]).map(e => String(e));
+      }
+
+      const rawComps = data.components;
+      if (rawComps && typeof rawComps === 'object' && !Array.isArray(rawComps)) {
+        const comps: Record<string, string> = {};
+        for (const [key, val] of Object.entries(rawComps as Record<string, unknown>)) {
+          comps[key] = String(val ?? '');
+        }
+        item.components = comps;
+
+        // Extract damage/maxDamage for durability display
+        if (comps['minecraft:damage']) {
+          const d = parseInt(comps['minecraft:damage'], 10);
+          if (!isNaN(d)) item.damage = d;
+        }
+        if (comps['minecraft:max_damage']) {
+          const md = parseInt(comps['minecraft:max_damage'], 10);
+          if (!isNaN(md)) item.maxDamage = md;
+        }
+      }
+
+      // Trigger reactivity
+      slots.value = [...slots.value];
+
+      // Fetch texture (non-blocking — updates the item when ready)
+      fetchItemTexture(slotIdx);
+    } catch {
+      // Silently fail for details
+    }
+  }
+
+  async function fetchItemTexture(slotIdx: number): Promise<void> {
+    const item = slots.value[slotIdx];
+    if (!item) return;
+
+    try {
+      const tex = await bridge.getItemTexture(slotIdx);
+      item.textureUrl = `data:image/png;base64,${tex.base64Png}`;
+      item.spriteName = tex.spriteName;
+      slots.value = [...slots.value];
+    } catch {
+      // Texture not available (older mod version or unsupported item)
+    }
+  }
+
+  function selectSlot(idx: number | null) {
+    selectedSlot.value = idx;
+    if (idx !== null && slots.value[idx]) {
+      fetchItemDetails(idx);
+    }
+  }
+
+  return {
+    slots,
+    selectedSlot,
+    isLoading,
+    error,
+    fetchInventory,
+    fetchItemDetails,
+    selectSlot,
+  };
+});
+
+function unwrapValue(data: unknown): unknown {
+  if (data === null || data === undefined) return data;
+  if (Array.isArray(data)) return data.map(unwrapValue);
+  if (typeof data !== 'object') return data;
+
+  const obj = data as Record<string, unknown>;
+  if ('type' in obj && 'value' in obj && typeof obj.type === 'string') {
+    const t = obj.type as string;
+    if (t === 'table') return unwrapValue(obj.value);
+    if (t === 'string' || t === 'number' || t === 'boolean' || t === 'nil' || t === 'userdata') {
+      return obj.value;
+    }
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    result[key] = unwrapValue(val);
+  }
+  return result;
+}
