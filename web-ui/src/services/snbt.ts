@@ -102,8 +102,11 @@ export function parseSnbt(input: string): SnbtNode {
 
 class SnbtParser {
   private pos = 0
+  private readonly src: string
 
-  constructor(private readonly src: string) {}
+  constructor(src: string) {
+    this.src = src
+  }
 
   parseValue(): SnbtNode {
     this.skipWhitespace()
