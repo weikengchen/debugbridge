@@ -31,9 +31,9 @@ async function inspectPinned(pinned: typeof inspector.pinnedObjects[0]) {
 async function quickInspect(target: 'minecraft' | 'player' | 'world') {
   emit('update:activeTab', 'inspector')
   const code = {
-    minecraft: 'return java.import("net.minecraft.client.Minecraft"):getInstance()',
-    player: 'return java.import("net.minecraft.client.Minecraft"):getInstance().player',
-    world: 'return java.import("net.minecraft.client.Minecraft"):getInstance().level',
+    minecraft: 'return mc',
+    player: 'return player',
+    world: 'return level',
   }
   const name = {
     minecraft: 'Minecraft',

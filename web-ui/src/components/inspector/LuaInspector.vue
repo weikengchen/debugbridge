@@ -76,11 +76,18 @@ function handlePin() {
 
       <div v-else-if="!inspector.isLoading" class="text-zinc-500 text-center py-8">
         <p>Enter a Lua expression to inspect an object.</p>
+        <p class="text-xs mt-2">
+          Convenience globals: <code class="text-blue-300">mc</code>,
+          <code class="text-blue-300">player</code>,
+          <code class="text-blue-300">level</code> resolve to the current Minecraft
+          instance, local player, and client level.
+        </p>
         <p class="text-xs mt-2">Examples:</p>
         <ul class="text-xs mt-1 space-y-1">
-          <li><code class="text-blue-300">return java.import("net.minecraft.client.Minecraft"):getInstance()</code></li>
-          <li><code class="text-blue-300">return mc.player:blockPosition()</code></li>
-          <li><code class="text-blue-300">return mc.level:entitiesForRendering()</code></li>
+          <li><code class="text-blue-300">return mc</code></li>
+          <li><code class="text-blue-300">return player:blockPosition()</code></li>
+          <li><code class="text-blue-300">return level:entitiesForRendering()</code></li>
+          <li><code class="text-blue-300">return java.import("net.minecraft.client.Minecraft")</code></li>
         </ul>
       </div>
     </div>

@@ -41,6 +41,44 @@ public class LuaRuntime {
         globals.set("require", LuaValue.NIL);
         globals.set("loadfile", LuaValue.NIL);
         globals.set("dofile", LuaValue.NIL);
+
+        // Install Minecraft convenience globals: mc / player / level resolve lazily
+        // through _G's __index, so they always reflect the current game state
+        // (player and level change across world loads / respawns) without having
+        // to re-call Minecraft.getInstance() by hand.
+        installMinecraftGlobals();
+    }
+
+    /**
+     * Install a __index metatable on the globals so bare references to
+     * {@code mc}, {@code player}, and {@code level} resolve dynamically.
+     * Runs once at startup; failures (e.g. missing class, bad mappings) are
+     * swallowed so the rest of the Lua environment stays usable.
+     */
+    private void installMinecraftGlobals() {
+        String bootstrap =
+            "do\n" +
+            "  local ok, Minecraft = pcall(java.import, 'net.minecraft.client.Minecraft')\n" +
+            "  if not ok then return end\n" +
+            "  local gmt = getmetatable(_G) or {}\n" +
+            "  local prev = gmt.__index\n" +
+            "  gmt.__index = function(t, k)\n" +
+            "    if k == 'mc' then return Minecraft:getInstance() end\n" +
+            "    if k == 'player' then return Minecraft:getInstance().player end\n" +
+            "    if k == 'level' then return Minecraft:getInstance().level end\n" +
+            "    if prev then\n" +
+            "      if type(prev) == 'function' then return prev(t, k) end\n" +
+            "      return prev[k]\n" +
+            "    end\n" +
+            "    return nil\n" +
+            "  end\n" +
+            "  setmetatable(_G, gmt)\n" +
+            "end\n";
+        try {
+            globals.load(bootstrap, "=mc-globals").invoke();
+        } catch (Exception e) {
+            // Non-fatal: users can still use java.import() directly.
+        }
     }
 
     private void installInterruptHook() {
