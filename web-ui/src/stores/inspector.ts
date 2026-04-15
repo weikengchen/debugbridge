@@ -1,27 +1,72 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import { bridge } from '../services/bridge';
+import * as lua from '../services/lua-helpers';
 import type { PinnedObject } from '../types';
 
-export interface ObjectNode {
+/**
+ * Tree node for the Lua Inspector. Mirrors the Object Browser's BrowserNode so
+ * Java fields are drillable: each node carries a Lua `path` and is lazily
+ * re-evaluated via `lua.evaluateAndDescribe` on expand.
+ */
+export interface InspectorNode {
   id: string;
-  key: string;
-  value: unknown;
-  type: string;
+  name: string;
+  path: string;            // Lua expression that produces this value
+  className?: string;
+  shortName?: string;
+  value?: unknown;
+  displayValue?: string;
   expandable: boolean;
   expanded: boolean;
-  children?: ObjectNode[];
-  loading?: boolean;
-  refId?: string;
-  path: string;
+  loading: boolean;
+  children?: InspectorNode[];
+  error?: string;
+}
+
+let nodeIdCounter = 0;
+function generateNodeId(): string {
+  return `inode_${++nodeIdCounter}`;
+}
+
+function formatDisplayValue(value: unknown, valueType: string): string {
+  if (value === null || value === undefined) return 'null';
+
+  if (valueType === 'string') {
+    const str = String(value);
+    if (str.length > 50) return `"${str.slice(0, 50)}..."`;
+    return `"${str}"`;
+  }
+
+  if (valueType === 'primitive') {
+    return String(value);
+  }
+
+  if (valueType === 'array') {
+    if (Array.isArray(value)) return `Array[${value.length}]`;
+    return 'Array';
+  }
+
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>;
+    if (obj.__class) {
+      const cls = String(obj.__class);
+      const shortName = cls.split('.').pop();
+      if (obj.__toString) return `${shortName}: ${String(obj.__toString)}`;
+      return shortName || 'Object';
+    }
+    return 'Object';
+  }
+
+  return String(value);
 }
 
 export const useInspectorStore = defineStore('inspector', () => {
-  const rootObject = ref<ObjectNode | null>(null);
+  const rootObject = ref<InspectorNode | null>(null);
   const pinnedObjects = ref<PinnedObject[]>([]);
   const isLoading = ref(false);
   const error = ref<string | null>(null);
-  const selectedPath = ref<string | null>(null);
+  const selectedNode = ref<InspectorNode | null>(null);
+  const lastCode = ref<string>('');
 
   // Load pinned objects from localStorage
   const savedPinned = localStorage.getItem('debugbridge-pinned');
@@ -29,7 +74,7 @@ export const useInspectorStore = defineStore('inspector', () => {
     try {
       pinnedObjects.value = JSON.parse(savedPinned);
     } catch {
-      // Ignore
+      // Ignore malformed storage
     }
   }
 
@@ -37,156 +82,135 @@ export const useInspectorStore = defineStore('inspector', () => {
     localStorage.setItem('debugbridge-pinned', JSON.stringify(pinnedObjects.value));
   }
 
-  function generateNodeId(): string {
-    return `node_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  function generatePinId(): string {
+    return `pin_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
   }
 
-  function determineType(value: unknown): { type: string; expandable: boolean } {
-    if (value === null) return { type: 'null', expandable: false };
-    if (value === undefined) return { type: 'undefined', expandable: false };
+  function createChildNodes(info: lua.ObjectInfo, parentPath: string): InspectorNode[] {
+    const children: InspectorNode[] = [];
 
-    const t = typeof value;
-    if (t === 'string') return { type: 'string', expandable: false };
-    if (t === 'number') return { type: 'number', expandable: false };
-    if (t === 'boolean') return { type: 'boolean', expandable: false };
-    if (t === 'function') return { type: 'function', expandable: false };
+    for (const field of info.fields) {
+      const fieldPath = `${parentPath}.${field.name}`;
+      const isObject = field.valueType === 'object' || field.valueType === 'array';
 
-    if (Array.isArray(value)) {
-      return { type: `array[${value.length}]`, expandable: value.length > 0 };
-    }
-
-    if (t === 'object') {
-      const obj = value as Record<string, unknown>;
-      // Check if it's a Java object reference
-      if (obj.__class) {
-        return { type: obj.__class as string, expandable: true };
-      }
-      if (obj.__javaClass) {
-        return { type: obj.__javaClass as string, expandable: true };
-      }
-      const keys = Object.keys(obj);
-      return { type: 'object', expandable: keys.length > 0 };
-    }
-
-    return { type: t, expandable: false };
-  }
-
-  function createNode(key: string, value: unknown, path: string): ObjectNode {
-    const { type, expandable } = determineType(value);
-    const node: ObjectNode = {
-      id: generateNodeId(),
-      key,
-      value,
-      type,
-      expandable,
-      expanded: false,
-      path,
-    };
-
-    // Extract refId if it's a Java object
-    if (typeof value === 'object' && value !== null) {
-      const obj = value as Record<string, unknown>;
-      if (obj.__refId) {
-        node.refId = obj.__refId as string;
-      }
-    }
-
-    return node;
-  }
-
-  function expandNode(node: ObjectNode): ObjectNode[] {
-    if (!node.expandable || node.children) return node.children || [];
-
-    const value = node.value;
-    const children: ObjectNode[] = [];
-
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => {
-        children.push(createNode(`[${index}]`, item, `${node.path}[${index}]`));
+      children.push({
+        id: generateNodeId(),
+        name: field.name,
+        path: fieldPath,
+        className: field.className,
+        shortName: field.className?.split('.').pop(),
+        value: field.value,
+        displayValue: formatDisplayValue(field.value, field.valueType),
+        expandable: isObject && field.expandable,
+        expanded: false,
+        loading: false,
       });
-    } else if (typeof value === 'object' && value !== null) {
-      const obj = value as Record<string, unknown>;
-      for (const [key, val] of Object.entries(obj)) {
-        // Skip internal properties
-        if (key.startsWith('__')) continue;
-        children.push(createNode(key, val, `${node.path}.${key}`));
-      }
     }
 
-    node.children = children;
+    // Expandable objects first, then alphabetical — same as Object Browser
+    children.sort((a, b) => {
+      if (a.expandable && !b.expandable) return -1;
+      if (!a.expandable && b.expandable) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
     return children;
   }
 
+  /**
+   * Evaluate a Lua expression and produce a drillable tree. The root is
+   * auto-expanded (its direct fields are fetched); deeper levels are expanded
+   * lazily on click via expandNode().
+   */
   async function inspect(code: string, name?: string): Promise<void> {
     isLoading.value = true;
     error.value = null;
+    lastCode.value = code;
 
     try {
-      // Wrap code to return a detailed inspection
-      const inspectCode = `
-        local obj = (function()
-          ${code}
-        end)()
-        if obj == nil then
-          return { __null = true }
-        end
-        return obj
-      `;
+      const info = await lua.evaluateAndDescribe(code);
+      const nodeName = name || info.shortName || 'result';
+      // Wrap the user's code so child paths can reference it as a single value.
+      const path = `(function() ${code} end)()`;
 
-      const result = await bridge.execute(inspectCode);
+      const node: InspectorNode = {
+        id: generateNodeId(),
+        name: nodeName,
+        path,
+        className: info.className,
+        shortName: info.shortName,
+        displayValue: info.displayValue,
+        expandable: !info.isNull && info.fields.length > 0,
+        expanded: true,
+        loading: false,
+        children: info.isNull ? [] : createChildNodes(info, path),
+      };
 
-      if (!result.success) {
-        throw new Error(result.error || 'Inspection failed');
-      }
-
-      rootObject.value = createNode(name || 'result', result.result, 'root');
-      selectedPath.value = 'root';
+      rootObject.value = node;
+      selectedNode.value = node;
     } catch (e) {
       error.value = e instanceof Error ? e.message : String(e);
       rootObject.value = null;
+      selectedNode.value = null;
     } finally {
       isLoading.value = false;
     }
   }
 
-  async function inspectDeep(node: ObjectNode): Promise<void> {
-    if (!node.refId) return;
+  /**
+   * Toggle expansion, fetching children on the first expand. Re-evaluates the
+   * node's Lua path so the view reflects the current runtime state.
+   */
+  async function expandNode(node: InspectorNode): Promise<void> {
+    if (!node.expandable) return;
+
+    if (node.children) {
+      node.expanded = !node.expanded;
+      return;
+    }
 
     node.loading = true;
+    node.error = undefined;
 
     try {
-      const code = `
-        local ref = java.ref("${node.refId}")
-        if ref == nil then return { __null = true } end
-        return java.describe(ref)
-      `;
+      const info = await lua.evaluateAndDescribe(`return ${node.path}`);
 
-      const result = await bridge.execute(code);
-
-      if (result.success && result.result) {
-        // Replace node's value with detailed inspection
-        node.value = result.result;
-        node.children = undefined; // Force re-expansion
-        expandNode(node);
+      if (info.isNull) {
+        node.children = [];
+        node.displayValue = 'null';
+      } else {
+        node.children = createChildNodes(info, node.path);
+        node.className = info.className;
+        node.shortName = info.shortName;
+        if (info.displayValue) {
+          node.displayValue = info.displayValue;
+        }
       }
+
+      node.expanded = true;
+    } catch (e) {
+      node.error = e instanceof Error ? e.message : String(e);
     } finally {
       node.loading = false;
     }
   }
 
+  function selectNode(node: InspectorNode) {
+    selectedNode.value = node;
+  }
+
   function pinObject(name: string, code: string, refId?: string): void {
     const existing = pinnedObjects.value.find(p => p.name === name);
     if (existing) {
-      // Update existing pin
       existing.code = code;
-      existing.refId = refId || existing.refId;
+      if (refId) existing.refId = refId;
     } else {
       pinnedObjects.value.push({
-        id: generateNodeId(),
+        id: generatePinId(),
         name,
         code,
         refId: refId || '',
-        className: '',
+        className: rootObject.value?.className || '',
         pinnedAt: new Date(),
       });
     }
@@ -203,8 +227,9 @@ export const useInspectorStore = defineStore('inspector', () => {
 
   function clear(): void {
     rootObject.value = null;
+    selectedNode.value = null;
     error.value = null;
-    selectedPath.value = null;
+    lastCode.value = '';
   }
 
   return {
@@ -212,10 +237,11 @@ export const useInspectorStore = defineStore('inspector', () => {
     pinnedObjects,
     isLoading,
     error,
-    selectedPath,
+    selectedNode,
+    lastCode,
     inspect,
-    inspectDeep,
     expandNode,
+    selectNode,
     pinObject,
     unpinObject,
     clear,

@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { useInspectorStore } from '../../stores/inspector'
 import { useConnectionStore } from '../../stores/connection'
-import ObjectTree from './ObjectTree.vue'
+import InspectorTree from './InspectorTree.vue'
 
 const inspector = useInspectorStore()
 const connection = useConnectionStore()
@@ -15,9 +15,9 @@ async function handleInspect() {
 
 function handlePin() {
   if (!inspector.rootObject) return
-  const name = prompt('Enter a name for this pin:', inspector.rootObject.key)
+  const name = prompt('Enter a name for this pin:', inspector.rootObject.name)
   if (name) {
-    inspector.pinObject(name, codeInput.value, inspector.rootObject.refId)
+    inspector.pinObject(name, codeInput.value)
   }
 }
 </script>
@@ -64,14 +64,27 @@ function handlePin() {
       </div>
     </div>
 
-    <!-- Object tree -->
-    <div class="flex-1 overflow-auto p-4">
-      <div v-if="inspector.error" class="text-red-400 mb-4">
-        {{ inspector.error }}
-      </div>
+    <!-- Error display -->
+    <div v-if="inspector.error" class="px-4 py-2 bg-red-900/30 border-b border-red-800 text-red-400 text-sm">
+      {{ inspector.error }}
+    </div>
 
-      <div v-if="inspector.rootObject">
-        <ObjectTree :node="inspector.rootObject" :depth="0" />
+    <!-- Tree view -->
+    <div class="flex-1 overflow-auto p-4">
+      <div v-if="inspector.rootObject" class="border border-zinc-800 rounded-lg overflow-hidden">
+        <!-- Root header -->
+        <div class="flex items-center gap-2 px-3 py-2 bg-zinc-800/50">
+          <span class="text-purple-400">◆</span>
+          <span class="font-medium text-zinc-200">{{ inspector.rootObject.name }}</span>
+          <span v-if="inspector.rootObject.className" class="text-xs text-zinc-500 font-mono">
+            {{ inspector.rootObject.className }}
+          </span>
+        </div>
+
+        <!-- Root content -->
+        <div class="p-2">
+          <InspectorTree :node="inspector.rootObject" :depth="0" />
+        </div>
       </div>
 
       <div v-else-if="!inspector.isLoading" class="text-zinc-500 text-center py-8">
@@ -89,6 +102,33 @@ function handlePin() {
           <li><code class="text-blue-300">return level:entitiesForRendering()</code></li>
           <li><code class="text-blue-300">return java.import("net.minecraft.client.Minecraft")</code></li>
         </ul>
+        <p class="text-xs mt-3 text-zinc-600">
+          Click ▶ to drill into Java objects. Double-click a row to copy its Lua path.
+        </p>
+      </div>
+    </div>
+
+    <!-- Selected node details -->
+    <div
+      v-if="inspector.selectedNode"
+      class="border-t border-zinc-800 p-3 bg-zinc-900/50 max-h-48 overflow-auto"
+    >
+      <div class="text-xs text-zinc-500 mb-1">Selected</div>
+      <div class="font-medium text-zinc-200">{{ inspector.selectedNode.name }}</div>
+      <div v-if="inspector.selectedNode.className" class="text-xs text-purple-400 mt-1 font-mono">
+        {{ inspector.selectedNode.className }}
+      </div>
+      <div
+        v-if="inspector.selectedNode.displayValue"
+        class="text-sm text-green-400 mt-1 font-mono break-all"
+      >
+        {{ inspector.selectedNode.displayValue }}
+      </div>
+      <div
+        class="text-xs text-zinc-600 mt-2 font-mono truncate"
+        :title="inspector.selectedNode.path"
+      >
+        {{ inspector.selectedNode.path }}
       </div>
     </div>
   </div>
