@@ -41,16 +41,29 @@ verify_jar() {
     unzip -tq "${jar_file}" 2>/dev/null
 }
 
+# Stage the new jar next to the target so the final swap can be an atomic
+# rename(2) on the same filesystem. Overwriting the target in place would
+# corrupt any running JVM's open ZipFile handle (its cached central-directory
+# offsets become garbage the moment the bytes change).
+TMP_JAR="${TARGET_JAR}.new"
+trap 'rm -f "${TMP_JAR}"' EXIT
+
 MAX_RETRIES=3
 RETRY_COUNT=0
 
 while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-    echo "Copying jar to ${TARGET_DIR}..."
-    cp -f "${SOURCE_JAR}" "${TARGET_JAR}"
+    echo "Staging jar at ${TMP_JAR}..."
+    cp -f "${SOURCE_JAR}" "${TMP_JAR}"
 
-    echo "Verifying copied jar integrity..."
-    if verify_jar "${TARGET_JAR}"; then
-        echo "Jar verification successful!"
+    echo "Verifying staged jar integrity..."
+    if verify_jar "${TMP_JAR}"; then
+        # mv on the same filesystem is rename(2) — atomic, and the running
+        # JVM keeps its old inode until it releases the handle. New launches
+        # pick up the new inode. (On Windows this would fail because renaming
+        # over an open file isn't allowed; use versioned filenames there.)
+        echo "Swapping staged jar into place..."
+        mv -f "${TMP_JAR}" "${TARGET_JAR}"
+        echo "Jar swap successful!"
         break
     else
         RETRY_COUNT=$((RETRY_COUNT + 1))
@@ -58,7 +71,7 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
             echo "Warning: Jar verification failed (attempt $RETRY_COUNT/$MAX_RETRIES). Retrying..."
             sleep 1
         else
-            echo "Error: Failed to copy a valid jar after $MAX_RETRIES attempts"
+            echo "Error: Failed to stage a valid jar after $MAX_RETRIES attempts"
             echo "Source: ${SOURCE_JAR}"
             echo "Target: ${TARGET_JAR}"
             exit 1
@@ -67,4 +80,4 @@ while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
 done
 
 echo "Build and deployment complete!"
-echo "Jar copied to: ${TARGET_JAR}"
+echo "Jar deployed to: ${TARGET_JAR}"
