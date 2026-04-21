@@ -6,7 +6,7 @@ plugins {
 }
 
 base {
-    archivesName.set("debugbridge-26.2-snapshot-3-shell")
+    archivesName.set("debugbridge-26.2-snapshot-3")
 }
 
 java {
@@ -16,9 +16,17 @@ java {
 }
 
 dependencies {
-    compileOnly(project(":core"))
+    implementation(project(":core"))
+    implementation("org.luaj:luaj-jse:3.0.1")
+    implementation("org.java-websocket:Java-WebSocket:1.5.7")
+    implementation("com.google.code.gson:gson:2.11.0")
     minecraft("com.mojang:minecraft:26.2-snapshot-3")
     implementation("net.fabricmc:fabric-loader:0.19.2")
+
+    include(project(":core"))
+    include("org.luaj:luaj-jse:3.0.1")
+    include("org.java-websocket:Java-WebSocket:1.5.7")
+    include("com.google.code.gson:gson:2.11.0")
 }
 
 tasks.withType<JavaCompile>().configureEach {

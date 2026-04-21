@@ -2,8 +2,8 @@
     "schemaVersion": 1,
     "id": "debugbridge",
     "version": "${version}",
-    "name": "DebugBridge Shell",
-    "description": "Placeholder shell module for DebugBridge 26.2 snapshot development. Not a production release.",
+    "name": "DebugBridge 26.2 Snapshot Bridge",
+    "description": "DebugBridge development build for Minecraft 26.2-snapshot-3 with boot path parity and stub providers.",
     "authors": ["Weikeng Chen"],
     "contact": {
         "homepage": "https://github.com/weikengchen/debugbridge",
@@ -13,6 +13,9 @@
     "license": "MIT",
     "icon": "assets/debugbridge/icon.png",
     "environment": "client",
+    "mixins": [
+        "debugbridge.mixins.json"
+    ],
     "entrypoints": {
         "client": [
             "com.debugbridge.fabric262snapshot3.DebugBridgeMod"
