@@ -1,6 +1,6 @@
-package com.debugbridge.fabric262snapshot3.mixin;
+package com.debugbridge.fabric262.mixin;
 
-import com.debugbridge.fabric262snapshot3.DebugBridgeMod;
+import com.debugbridge.fabric262.DebugBridgeMod;
 import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

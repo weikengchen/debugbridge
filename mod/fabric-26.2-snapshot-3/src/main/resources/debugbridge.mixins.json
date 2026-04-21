@@ -1,6 +1,6 @@
 {
     "required": true,
-    "package": "com.debugbridge.fabric262snapshot3.mixin",
+    "package": "com.debugbridge.fabric262.mixin",
     "compatibilityLevel": "JAVA_26",
     "client": [
         "MinecraftClientMixin",

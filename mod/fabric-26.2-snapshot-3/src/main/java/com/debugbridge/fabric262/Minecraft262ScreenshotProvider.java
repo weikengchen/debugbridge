@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.screenshot.JpegEncoder;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
  * The caller blocks on a {@link CompletableFuture} until the JPEG temp file has
  * been fully written.
  */
-public class Minecraft262Snapshot3ScreenshotProvider implements ScreenshotProvider {
+public class Minecraft262ScreenshotProvider implements ScreenshotProvider {
 
     @Override
     public Capture capture(int requestedDownscale, float quality, long timeoutMs) throws Exception {

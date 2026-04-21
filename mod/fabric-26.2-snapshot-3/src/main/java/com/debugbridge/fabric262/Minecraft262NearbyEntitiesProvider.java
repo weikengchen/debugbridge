@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.google.gson.JsonArray;
@@ -21,7 +21,7 @@ import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-public class Minecraft262Snapshot3NearbyEntitiesProvider implements NearbyEntitiesProvider {
+public class Minecraft262NearbyEntitiesProvider implements NearbyEntitiesProvider {
     @Override
     public JsonArray getNearbyEntities(double range, int limit) throws Exception {
         Minecraft mc = Minecraft.getInstance();

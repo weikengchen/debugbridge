@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.BridgeConfig;
 import net.minecraft.client.gui.GuiGraphicsExtractor;

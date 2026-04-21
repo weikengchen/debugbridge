@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.entity.LookedAtEntityProvider;
 import net.minecraft.client.Minecraft;
@@ -11,7 +11,7 @@ import net.minecraft.world.phys.Vec3;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-public class Minecraft262Snapshot3LookedAtEntityProvider implements LookedAtEntityProvider {
+public class Minecraft262LookedAtEntityProvider implements LookedAtEntityProvider {
     @Override
     public Integer getLookedAtEntity(double range) throws Exception {
         Minecraft mc = Minecraft.getInstance();

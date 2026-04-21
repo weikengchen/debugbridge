@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3.mixin;
+package com.debugbridge.fabric262.mixin;
 
 import com.debugbridge.core.entity.ClientEntityGlowManager;
 import net.minecraft.world.entity.Entity;

@@ -1,4 +1,4 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.BridgeConfig;
 import com.debugbridge.core.lua.ThreadDispatcher;
@@ -117,11 +117,11 @@ public class DebugBridgeMod implements ClientModInitializer {
             }
         };
 
-        GameStateProvider stateProvider = new Minecraft262Snapshot3StateProvider();
-        ScreenshotProvider screenshotProvider = new Minecraft262Snapshot3ScreenshotProvider();
-        ItemTextureProvider textureProvider = new Minecraft262Snapshot3ItemTextureProvider();
-        Minecraft262Snapshot3NearbyEntitiesProvider entitiesProvider = new Minecraft262Snapshot3NearbyEntitiesProvider();
-        Minecraft262Snapshot3LookedAtEntityProvider lookedAtProvider = new Minecraft262Snapshot3LookedAtEntityProvider();
+        GameStateProvider stateProvider = new Minecraft262StateProvider();
+        ScreenshotProvider screenshotProvider = new Minecraft262ScreenshotProvider();
+        ItemTextureProvider textureProvider = new Minecraft262ItemTextureProvider();
+        Minecraft262NearbyEntitiesProvider entitiesProvider = new Minecraft262NearbyEntitiesProvider();
+        Minecraft262LookedAtEntityProvider lookedAtProvider = new Minecraft262LookedAtEntityProvider();
 
         int actualPort = startServerOnAvailablePort(
             config.port, resolver, dispatcher, stateProvider, screenshotProvider);
@@ -192,7 +192,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         }
     }
 
-    private static class Minecraft262Snapshot3StateProvider implements GameStateProvider {
+    private static class Minecraft262StateProvider implements GameStateProvider {
         @Override
         public JsonObject captureSnapshot() {
             Minecraft mc = Minecraft.getInstance();

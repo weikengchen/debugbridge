@@ -18,7 +18,7 @@
     ],
     "entrypoints": {
         "client": [
-            "com.debugbridge.fabric262snapshot3.DebugBridgeMod"
+            "com.debugbridge.fabric262.DebugBridgeMod"
         ]
     },
     "depends": {

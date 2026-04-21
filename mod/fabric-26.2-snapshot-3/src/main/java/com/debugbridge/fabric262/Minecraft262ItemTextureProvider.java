@@ -1,8 +1,8 @@
-package com.debugbridge.fabric262snapshot3;
+package com.debugbridge.fabric262;
 
 import com.debugbridge.core.texture.ItemTextureProvider;
 
-public class Minecraft262Snapshot3ItemTextureProvider implements ItemTextureProvider {
+public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
     @Override
     public TextureResult getItemTexture(int slot) {
         throw new UnsupportedOperationException("26.2 item texture provider not implemented");
