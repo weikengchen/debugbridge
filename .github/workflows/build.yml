@@ -39,7 +39,7 @@ jobs:
           path: mod/fabric-1.21.11/build/libs/*.jar
           if-no-files-found: error
 
-  build-26-2-snapshot-3:
+  build-26-2-snapshot-4:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -55,13 +55,13 @@ jobs:
 
       - name: Build Fabric 26.2 snapshot mod
         working-directory: mod
-        run: ./gradlew :fabric-26.2-snapshot-3:build --no-daemon
+        run: ./gradlew :fabric-26.2-snapshot-4:build --no-daemon
 
       - name: Upload 26.2 artifact
         uses: actions/upload-artifact@v7
         with:
-          name: debugbridge-26.2-snapshot-3
-          path: mod/fabric-26.2-snapshot-3/build/libs/*.jar
+          name: debugbridge-26.2-snapshot-4
+          path: mod/fabric-26.2-snapshot-4/build/libs/*.jar
           if-no-files-found: error
 
   build-web-ui:

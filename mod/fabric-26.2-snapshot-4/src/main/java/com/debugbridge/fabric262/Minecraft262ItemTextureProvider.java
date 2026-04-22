@@ -26,7 +26,6 @@ import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.Util;
@@ -299,17 +298,15 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
     ) {
         SubmitNodeCollector collector = new SubmitNodeStorage();
         try (MultiBufferSource.BufferSource bufferSource = createMainBufferSource();
-             MultiBufferSource.BufferSource crumblingBufferSource = createCrumblingBufferSource();
              OutlineBufferSource outlineBufferSource = new OutlineBufferSource(createOutlineBufferSource());
              FeatureRenderDispatcher features = new FeatureRenderDispatcher(
-                     (SubmitNodeStorage) collector,
-                     mc.getModelManager(),
-                     bufferSource,
-                     mc.getAtlasManager(),
-                     outlineBufferSource,
-                     crumblingBufferSource,
-                     mc.font,
-                     mc.gameRenderer.gameRenderState())) {
+                      (SubmitNodeStorage) collector,
+                      mc.getModelManager(),
+                      bufferSource,
+                      mc.getAtlasManager(),
+                      outlineBufferSource,
+                      mc.font,
+                      mc.gameRenderer.gameRenderState())) {
             renderState.submit(poseStack, collector, 15728880, OverlayTexture.NO_OVERLAY, 0);
             features.renderAllFeatures();
         }
@@ -330,10 +327,6 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
 
     private static MultiBufferSource.BufferSource createOutlineBufferSource() {
         return MultiBufferSource.create(1536, ObjectSortedSets.emptySet());
-    }
-
-    private static MultiBufferSource.BufferSource createCrumblingBufferSource() {
-        return MultiBufferSource.create(1536, new ObjectLinkedOpenHashSet<>(ModelBakery.DESTROY_TYPES));
     }
 
     private static final int MAP_SIZE = 128;

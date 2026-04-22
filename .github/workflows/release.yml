@@ -38,7 +38,7 @@ jobs:
           path: mod/fabric-1.21.11/build/libs/*.jar
           if-no-files-found: error
 
-  build-26-2-snapshot-3:
+  build-26-2-snapshot-4:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -54,19 +54,19 @@ jobs:
 
       - name: Build Fabric 26.2 snapshot mod
         working-directory: mod
-        run: ./gradlew :fabric-26.2-snapshot-3:build --no-daemon
+        run: ./gradlew :fabric-26.2-snapshot-4:build --no-daemon
 
       - name: Upload 26.2 release artifact
         uses: actions/upload-artifact@v7
         with:
-          name: release-fabric-26.2-snapshot-3
-          path: mod/fabric-26.2-snapshot-3/build/libs/*.jar
+          name: release-fabric-26.2-snapshot-4
+          path: mod/fabric-26.2-snapshot-4/build/libs/*.jar
           if-no-files-found: error
 
   build-and-release:
     needs:
       - build-legacy-mods
-      - build-26-2-snapshot-3
+      - build-26-2-snapshot-4
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -90,8 +90,8 @@ jobs:
       - name: Download 26.2 artifact
         uses: actions/download-artifact@v8
         with:
-          name: release-fabric-26.2-snapshot-3
-          path: release-artifacts/fabric-26.2-snapshot-3
+          name: release-fabric-26.2-snapshot-4
+          path: release-artifacts/fabric-26.2-snapshot-4
 
       - name: Create Release
         uses: softprops/action-gh-release@v3
@@ -102,7 +102,7 @@ jobs:
           files: |
             release-artifacts/fabric-1.19/*.jar
             release-artifacts/fabric-1.21.11/*.jar
-            release-artifacts/fabric-26.2-snapshot-3/*.jar
+            release-artifacts/fabric-26.2-snapshot-4/*.jar
           body: |
             ## DebugBridge v${{ steps.version.outputs.VERSION }}
 
@@ -116,4 +116,4 @@ jobs:
             ### Supported Versions
             - Minecraft 1.19 (Fabric Loader >= 0.14.0)
             - Minecraft 1.21.11 (Fabric Loader >= 0.16.0)
-            - Minecraft 26.2-snapshot-3 (Fabric Loader >= 0.19.2)
+            - Minecraft 26.2-snapshot-4 (Fabric Loader >= 0.19.2)

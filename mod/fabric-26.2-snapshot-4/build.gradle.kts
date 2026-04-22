@@ -6,7 +6,7 @@ plugins {
 }
 
 base {
-    archivesName.set("debugbridge-26.2-snapshot-3")
+    archivesName.set("debugbridge-26.2-snapshot-4")
 }
 
 java {
@@ -20,7 +20,7 @@ dependencies {
     implementation("org.luaj:luaj-jse:3.0.1")
     implementation("org.java-websocket:Java-WebSocket:1.5.7")
     implementation("com.google.code.gson:gson:2.11.0")
-    minecraft("com.mojang:minecraft:26.2-snapshot-3")
+    minecraft("com.mojang:minecraft:26.2-snapshot-4")
     implementation("net.fabricmc:fabric-loader:0.19.2")
 
     include(project(":core"))
@@ -30,7 +30,8 @@ dependencies {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release.set(26)
+    // 26.2-snapshot-4's Mojang metadata declares Java runtime 25.
+    options.release.set(25)
 }
 
 tasks.processResources {

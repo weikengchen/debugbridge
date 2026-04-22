@@ -18,5 +18,5 @@ include(":agent")
 // Fabric modules use different Loom and Java levels, so keep each module explicit.
 include(":fabric-1.19")
 include(":fabric-1.21.11")
-include(":fabric-26.2-snapshot-3")
+include(":fabric-26.2-snapshot-4")
 // include(":fabric-26.1")

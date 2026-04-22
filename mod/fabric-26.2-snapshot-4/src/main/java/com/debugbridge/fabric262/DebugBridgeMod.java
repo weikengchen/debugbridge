@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DebugBridgeMod implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("DebugBridge");
-    private static final String MC_VERSION = "26.2-snapshot-3";
+    private static final String MC_VERSION = "26.2-snapshot-4";
 
     private static final int PORT_RANGE_START = 9876;
     private static final int PORT_RANGE_END = 9886;
