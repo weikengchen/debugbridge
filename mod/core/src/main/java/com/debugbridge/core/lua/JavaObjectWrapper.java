@@ -53,19 +53,9 @@ public class JavaObjectWrapper extends LuaUserdata {
             // Not a field
         }
 
-        // 2. If field exists, check if a method with the same name also exists.
-        // If both exist, prefer the method to handle the common Java pattern:
-        //   private Level level;
-        //   public Level level() { return level; }
-        // Without this, `obj:level()` returns the field and fails with
-        // "attempt to call userdata".
-        // We only do this check when a field exists (rare) to avoid the overhead
-        // of hasMethod() on every property access.
-        if (field != null && hasMethod(declaredType, name)) {
-            return new MethodCallWrapper(javaObject, declaredType, mojangTypeName, name, bridge);
-        }
-
-        // 3. Return field value if field exists (no method collision)
+        // 2. Return field value if field exists. Field-first resolution keeps
+        // nested field access working and lets call interception produce a
+        // targeted error for the common `obj:field()` mistake.
         if (field != null) {
             try {
                 field.setAccessible(true);
@@ -86,28 +76,9 @@ public class JavaObjectWrapper extends LuaUserdata {
             }
         }
 
-        // 4. No field — return a MethodCallWrapper (will error at call time
+        // 3. No field — return a MethodCallWrapper (will error at call time
         // if no such method exists, with a helpful message)
         return new MethodCallWrapper(javaObject, declaredType, mojangTypeName, name, bridge);
-    }
-
-    /**
-     * Check if a method with the given Mojang name exists on this class or its hierarchy.
-     */
-    private boolean hasMethod(Class<?> clazz, String mojangName) {
-        java.util.Set<Class<?>> hierarchy = new java.util.LinkedHashSet<>();
-        MethodCallWrapper.collectHierarchy(clazz, hierarchy);
-        for (Class<?> c : hierarchy) {
-            String mojangClass = bridge.getResolver().unresolveClass(c.getName());
-            String runtimeName = bridge.getResolver().resolveMethod(mojangClass, mojangName, null);
-
-            for (java.lang.reflect.Method m : c.getDeclaredMethods()) {
-                if (m.getName().equals(runtimeName) || m.getName().equals(mojangName)) {
-                    return true;
-                }
-            }
-        }
-        return false;
     }
 
     @Override
