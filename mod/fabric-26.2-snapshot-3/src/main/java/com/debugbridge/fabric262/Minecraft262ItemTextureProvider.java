@@ -10,6 +10,8 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
+import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
+import it.unimi.dsi.fastutil.objects.ObjectSortedSets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.OutlineBufferSource;
@@ -21,9 +23,13 @@ import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.item.TrackingItemStackRenderState;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.Sheets;
 import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.Util;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -41,7 +47,7 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.Base64;
-import java.util.LinkedHashSet;
+import java.util.SequencedSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -292,9 +298,9 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
             PoseStack poseStack
     ) {
         SubmitNodeCollector collector = new SubmitNodeStorage();
-        try (MultiBufferSource.BufferSource bufferSource = createBufferSource();
-             MultiBufferSource.BufferSource crumblingBufferSource = createBufferSource();
-             OutlineBufferSource outlineBufferSource = new OutlineBufferSource(createBufferSource());
+        try (MultiBufferSource.BufferSource bufferSource = createMainBufferSource();
+             MultiBufferSource.BufferSource crumblingBufferSource = createCrumblingBufferSource();
+             OutlineBufferSource outlineBufferSource = new OutlineBufferSource(createOutlineBufferSource());
              FeatureRenderDispatcher features = new FeatureRenderDispatcher(
                      (SubmitNodeStorage) collector,
                      mc.getModelManager(),
@@ -309,8 +315,25 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
         }
     }
 
-    private static MultiBufferSource.BufferSource createBufferSource() {
-        return MultiBufferSource.create(786432, new LinkedHashSet<RenderType>());
+    private static MultiBufferSource.BufferSource createMainBufferSource() {
+        SequencedSet<RenderType> fixedTypes = Util.make(new ObjectLinkedOpenHashSet<>(), types -> {
+            types.add(Sheets.cutoutBlockItemSheet());
+            types.add(Sheets.translucentBlockItemSheet());
+            types.add(Sheets.cutoutItemSheet());
+            types.add(Sheets.translucentItemSheet());
+            types.add(RenderTypes.glint());
+            types.add(RenderTypes.glintTranslucent());
+            types.add(RenderTypes.waterMask());
+        });
+        return MultiBufferSource.create(786432, fixedTypes);
+    }
+
+    private static MultiBufferSource.BufferSource createOutlineBufferSource() {
+        return MultiBufferSource.create(1536, ObjectSortedSets.emptySet());
+    }
+
+    private static MultiBufferSource.BufferSource createCrumblingBufferSource() {
+        return MultiBufferSource.create(1536, new ObjectLinkedOpenHashSet<>(ModelBakery.DESTROY_TYPES));
     }
 
     private static final int MAP_SIZE = 128;
