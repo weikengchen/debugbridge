@@ -27,13 +27,27 @@ export interface DisplayItem {
   name?: string;
 }
 
+export interface EquipmentItem {
+  itemId: string;
+  damage?: number;
+  maxDamage?: number;
+}
+
+export interface FrameItem {
+  itemId: string;
+  count: number;
+  damage?: number;
+  maxDamage?: number;
+  name?: string;
+}
+
 export interface EntityDetails {
   entityId: number;
   customName: string | null;
   health: number | null;
   maxHealth: number | null;
   armor: number | null;
-  equipment: Record<string, string>;
+  equipment: Record<string, EquipmentItem>;
   tags: string[];
   isOnFire: boolean;
   isSprinting: boolean;
@@ -42,6 +56,7 @@ export interface EntityDetails {
   displayText: string | null;
   displayItem: DisplayItem | null;
   displayBlock: string | null;
+  frameItem: FrameItem | null;
   raw: Record<string, unknown>;
 }
 
@@ -56,6 +71,7 @@ export const useEntitiesStore = defineStore('entities', () => {
   const selectedEntityId = ref<number | null>(null);
   const selectedDetails = ref<EntityDetails | null>(null);
   const equipmentTextures = ref<Record<string, string>>({});
+  const equipmentSpriteNames = ref<Record<string, string>>({});
   // Cache keyed by `${entityId}:${slot}:${itemId}` — rendering the entity's actual
   // ItemStack honors damage-based and CMD-based model overrides.
   const entityPrimaryTextures = ref<Record<string, string>>({});
@@ -227,11 +243,22 @@ export const useEntitiesStore = defineStore('entities', () => {
         return;
       }
 
-      const eq = (data.equipment && typeof data.equipment === 'object')
-        ? Object.fromEntries(
-            Object.entries(data.equipment as Record<string, unknown>).map(([k, v]) => [k, String(v)])
-          )
-        : {};
+      const eq: Record<string, EquipmentItem> = {};
+      if (data.equipment && typeof data.equipment === 'object') {
+        for (const [slot, v] of Object.entries(data.equipment as Record<string, unknown>)) {
+          if (typeof v === 'string') {
+            // Back-compat: older mod builds sent the descriptionId as a bare string.
+            eq[slot] = { itemId: v };
+          } else if (v && typeof v === 'object') {
+            const o = v as Record<string, unknown>;
+            eq[slot] = {
+              itemId: String(o.itemId ?? ''),
+              damage: o.damage != null ? Number(o.damage) : undefined,
+              maxDamage: o.maxDamage != null ? Number(o.maxDamage) : undefined,
+            };
+          }
+        }
+      }
 
       // Update the entity's customName from detail fetch
       const entity = entities.value.find(e => e.id === entityId);
@@ -246,6 +273,18 @@ export const useEntitiesStore = defineStore('entities', () => {
           itemId: String(di.itemId ?? ''),
           count: Number(di.count ?? 1),
           name: di.name ? String(di.name) : undefined,
+        };
+      }
+
+      let frameItem: FrameItem | null = null;
+      if (data.frameItem && typeof data.frameItem === 'object') {
+        const fi = data.frameItem as Record<string, unknown>;
+        frameItem = {
+          itemId: String(fi.itemId ?? ''),
+          count: Number(fi.count ?? 1),
+          damage: fi.damage != null ? Number(fi.damage) : undefined,
+          maxDamage: fi.maxDamage != null ? Number(fi.maxDamage) : undefined,
+          name: fi.name ? String(fi.name) : undefined,
         };
       }
 
@@ -264,12 +303,17 @@ export const useEntitiesStore = defineStore('entities', () => {
         displayText: data.displayText ? String(data.displayText) : null,
         displayItem,
         displayBlock: data.displayBlock ? String(data.displayBlock) : null,
+        frameItem,
         raw: data as Record<string, unknown>,
       };
 
-      // Fetch textures for each equipment slot (parallel, best-effort)
+      // Fetch textures for each equipment slot — plus the FRAME slot if this
+      // entity has a framed item. Reuses equipmentTextures / equipmentSpriteNames
+      // keyed by slot name so the UI can look up "FRAME" the same way.
       equipmentTextures.value = {};
+      equipmentSpriteNames.value = {};
       const slots = Object.keys(eq);
+      if (frameItem) slots.push('FRAME');
       if (slots.length > 0) {
         await Promise.all(slots.map(async (slot) => {
           try {
@@ -278,6 +322,12 @@ export const useEntitiesStore = defineStore('entities', () => {
               ...equipmentTextures.value,
               [slot]: `data:image/png;base64,${tex.base64Png}`,
             };
+            if (tex.spriteName) {
+              equipmentSpriteNames.value = {
+                ...equipmentSpriteNames.value,
+                [slot]: tex.spriteName,
+              };
+            }
           } catch {
             // Texture fetch failure is non-fatal; just skip
           }
@@ -295,6 +345,7 @@ export const useEntitiesStore = defineStore('entities', () => {
     selectedEntityId.value = id;
     selectedDetails.value = null;
     equipmentTextures.value = {};
+    equipmentSpriteNames.value = {};
 
     if (previousId !== null && previousId !== id) {
       bridge.setEntityGlow(previousId, false).catch(() => {});
@@ -369,6 +420,7 @@ export const useEntitiesStore = defineStore('entities', () => {
     selectedEntityId,
     selectedDetails,
     equipmentTextures,
+    equipmentSpriteNames,
     entityPrimaryTextures,
     isLoading,
     isLoadingDetails,

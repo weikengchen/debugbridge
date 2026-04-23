@@ -399,6 +399,41 @@ const rawTreeExpanded = ref(false)
                 </div>
               </div>
 
+              <!-- Frame Item (ItemFrame content) -->
+              <div v-if="entities.selectedDetails.frameItem" class="mt-2">
+                <div class="text-xs text-zinc-500 mb-0.5">Frame Item</div>
+                <div class="flex items-start gap-1.5 text-xs font-mono text-zinc-400 py-0.5">
+                  <img
+                    v-if="entities.equipmentTextures['FRAME']"
+                    :src="entities.equipmentTextures['FRAME']"
+                    class="equip-icon"
+                    alt=""
+                  />
+                  <span v-else class="equip-icon-placeholder"></span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="text-zinc-300">{{ shortItemName(entities.selectedDetails.frameItem.itemId) }}</span>
+                      <span v-if="entities.selectedDetails.frameItem.count > 1" class="text-zinc-500">
+                        ×{{ entities.selectedDetails.frameItem.count }}
+                      </span>
+                      <span v-if="entities.selectedDetails.frameItem.name" class="text-yellow-400">
+                        "{{ entities.selectedDetails.frameItem.name }}"
+                      </span>
+                      <span
+                        v-if="entities.selectedDetails.frameItem.maxDamage && entities.selectedDetails.frameItem.maxDamage > 0"
+                        class="text-zinc-500"
+                        title="damage / maxDamage"
+                      >
+                        {{ entities.selectedDetails.frameItem.damage ?? 0 }} / {{ entities.selectedDetails.frameItem.maxDamage }}
+                      </span>
+                    </div>
+                    <div v-if="entities.equipmentSpriteNames['FRAME']" class="text-[10px] text-zinc-600 break-all mt-0.5">
+                      {{ entities.equipmentSpriteNames['FRAME'] }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div v-if="entities.selectedDetails.health !== null" class="mt-2">
                 <div class="text-xs text-zinc-500">Health</div>
                 <div class="flex items-center gap-2 mt-0.5">
@@ -425,7 +460,7 @@ const rawTreeExpanded = ref(false)
                 <div
                   v-for="(item, slot) in entities.selectedDetails.equipment"
                   :key="slot"
-                  class="flex items-center gap-1.5 text-xs font-mono text-zinc-400 py-0.5"
+                  class="flex items-start gap-1.5 text-xs font-mono text-zinc-400 py-0.5"
                 >
                   <img
                     v-if="entities.equipmentTextures[String(slot)]"
@@ -434,8 +469,18 @@ const rawTreeExpanded = ref(false)
                     alt=""
                   />
                   <span v-else class="equip-icon-placeholder"></span>
-                  <span class="text-zinc-500">{{ equipLabel(String(slot)) }}:</span>
-                  <span class="text-zinc-300">{{ shortItemName(String(item)) }}</span>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                      <span class="text-zinc-500">{{ equipLabel(String(slot)) }}:</span>
+                      <span class="text-zinc-300">{{ shortItemName(item.itemId) }}</span>
+                      <span v-if="item.maxDamage && item.maxDamage > 0" class="text-zinc-500" title="damage / maxDamage">
+                        {{ item.damage ?? 0 }} / {{ item.maxDamage }}
+                      </span>
+                    </div>
+                    <div v-if="entities.equipmentSpriteNames[String(slot)]" class="text-[10px] text-zinc-600 break-all mt-0.5">
+                      {{ entities.equipmentSpriteNames[String(slot)] }}
+                    </div>
+                  </div>
                 </div>
               </div>
 

@@ -159,6 +159,25 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
                 obj.addProperty("distance",
                     Math.round(target.distanceTo(mc.player) * 10.0) / 10.0);
 
+                // ItemFrame-specific: the framed item, with damage if applicable.
+                if (target instanceof ItemFrame frame) {
+                    ItemStack framed = frame.getItem();
+                    if (framed != null && !framed.isEmpty()) {
+                        JsonObject item = new JsonObject();
+                        item.addProperty("itemId", framed.getItem().getDescriptionId());
+                        item.addProperty("count", framed.getCount());
+                        if (framed.getMaxDamage() > 0) {
+                            item.addProperty("damage", framed.getDamageValue());
+                            item.addProperty("maxDamage", framed.getMaxDamage());
+                        }
+                        var hoverName = framed.getHoverName();
+                        if (hoverName != null) {
+                            item.addProperty("name", hoverName.getString());
+                        }
+                        obj.add("frameItem", item);
+                    }
+                }
+
                 // LivingEntity-specific fields
                 if (target instanceof LivingEntity living) {
                     obj.addProperty("health", Math.round(living.getHealth() * 10.0) / 10.0);
@@ -261,7 +280,13 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
     private void addEquipment(JsonObject equipment, String slotName, LivingEntity living, EquipmentSlot slot) {
         ItemStack stack = living.getItemBySlot(slot);
         if (stack != null && !stack.isEmpty()) {
-            equipment.addProperty(slotName, stack.getItem().getDescriptionId());
+            JsonObject item = new JsonObject();
+            item.addProperty("itemId", stack.getItem().getDescriptionId());
+            if (stack.getMaxDamage() > 0) {
+                item.addProperty("damage", stack.getDamageValue());
+                item.addProperty("maxDamage", stack.getMaxDamage());
+            }
+            equipment.add(slotName, item);
         }
     }
 
