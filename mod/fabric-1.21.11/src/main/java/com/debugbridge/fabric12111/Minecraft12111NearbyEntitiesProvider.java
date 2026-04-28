@@ -3,6 +3,7 @@ package com.debugbridge.fabric12111;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Display;
@@ -285,6 +286,9 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
             if (stack.getMaxDamage() > 0) {
                 item.addProperty("damage", stack.getDamageValue());
                 item.addProperty("maxDamage", stack.getMaxDamage());
+            }
+            if (stack.has(DataComponents.CUSTOM_NAME)) {
+                item.addProperty("name", stack.getHoverName().getString());
             }
             equipment.add(slotName, item);
         }

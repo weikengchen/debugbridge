@@ -227,6 +227,9 @@ public class Minecraft119NearbyEntitiesProvider implements NearbyEntitiesProvide
                 item.addProperty("damage", stack.getDamageValue());
                 item.addProperty("maxDamage", stack.getMaxDamage());
             }
+            if (stack.hasCustomHoverName()) {
+                item.addProperty("name", stack.getHoverName().getString());
+            }
             equipment.add(slotName, item);
         }
     }

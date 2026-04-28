@@ -473,6 +473,9 @@ const rawTreeExpanded = ref(false)
                     <div class="flex items-center gap-1.5 flex-wrap">
                       <span class="text-zinc-500">{{ equipLabel(String(slot)) }}:</span>
                       <span class="text-zinc-300">{{ shortItemName(item.itemId) }}</span>
+                      <span v-if="item.name" class="text-yellow-400">
+                        "{{ item.name }}"
+                      </span>
                       <span v-if="item.maxDamage && item.maxDamage > 0" class="text-zinc-500" title="damage / maxDamage">
                         {{ item.damage ?? 0 }} / {{ item.maxDamage }}
                       </span>

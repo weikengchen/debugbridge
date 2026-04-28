@@ -31,6 +31,7 @@ export interface EquipmentItem {
   itemId: string;
   damage?: number;
   maxDamage?: number;
+  name?: string;
 }
 
 export interface FrameItem {
@@ -255,6 +256,7 @@ export const useEntitiesStore = defineStore('entities', () => {
               itemId: String(o.itemId ?? ''),
               damage: o.damage != null ? Number(o.damage) : undefined,
               maxDamage: o.maxDamage != null ? Number(o.maxDamage) : undefined,
+              name: o.name ? String(o.name) : undefined,
             };
           }
         }
