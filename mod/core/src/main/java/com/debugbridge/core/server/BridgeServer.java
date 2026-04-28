@@ -86,6 +86,18 @@ public class BridgeServer extends WebSocketServer {
      */
     private volatile Consumer<Exception> bindErrorCallback;
 
+    /**
+     * Whether bytecode logger injection requests are honored. When false the
+     * three logger handlers behave as if they don't exist (Unknown request type).
+     */
+    private volatile boolean loggerInjectionEnabled = false;
+
+    /**
+     * Whether slash-command execution via the bridge is honored. When false
+     * runCommand requests behave as if they don't exist.
+     */
+    private volatile boolean runCommandEnabled = false;
+
     public BridgeServer(int port, MappingResolver resolver, ThreadDispatcher dispatcher) {
         this(port, resolver, dispatcher, null, null);
     }
@@ -125,6 +137,14 @@ public class BridgeServer extends WebSocketServer {
     public void setLoggerService(LoggerService service) {
         this.loggerService = service;
         LOG.info("[DebugBridge] Logger service registered: " + service.getClass().getSimpleName());
+    }
+
+    public void setLoggerInjectionEnabled(boolean enabled) {
+        this.loggerInjectionEnabled = enabled;
+    }
+
+    public void setRunCommandEnabled(boolean enabled) {
+        this.runCommandEnabled = enabled;
     }
 
     /**
@@ -225,7 +245,9 @@ public class BridgeServer extends WebSocketServer {
                 case "search" -> handleSearch(req);
                 case "snapshot" -> handleSnapshot(req);
                 case "screenshot" -> handleScreenshot(req);
-                case "runCommand" -> handleRunCommand(req);
+                case "runCommand" -> runCommandEnabled
+                    ? handleRunCommand(req)
+                    : BridgeResponse.error(req.id, "Unknown request type: runCommand");
                 case "status" -> handleStatus(req);
                 case "getItemTexture" -> handleGetItemTexture(req);
                 case "getEntityItemTexture" -> handleGetEntityItemTexture(req);
@@ -238,9 +260,15 @@ public class BridgeServer extends WebSocketServer {
                 case "setEntityGlow" -> handleSetEntityGlow(req);
                 case "setBlockGlow" -> handleSetBlockGlow(req);
                 case "clearBlockGlow" -> handleClearBlockGlow(req);
-                case "injectLogger" -> handleInjectLogger(req);
-                case "cancelLogger" -> handleCancelLogger(req);
-                case "listLoggers" -> handleListLoggers(req);
+                case "injectLogger" -> loggerInjectionEnabled
+                    ? handleInjectLogger(req)
+                    : BridgeResponse.error(req.id, "Unknown request type: injectLogger");
+                case "cancelLogger" -> loggerInjectionEnabled
+                    ? handleCancelLogger(req)
+                    : BridgeResponse.error(req.id, "Unknown request type: cancelLogger");
+                case "listLoggers" -> loggerInjectionEnabled
+                    ? handleListLoggers(req)
+                    : BridgeResponse.error(req.id, "Unknown request type: listLoggers");
                 default -> BridgeResponse.error(req.id, "Unknown request type: " + req.type);
             };
         } catch (Exception e) {

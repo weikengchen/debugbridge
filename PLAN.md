@@ -24,35 +24,27 @@ Two things to keep in mind while reading the rest:
 
 ## Pre-publication hygiene (blockers for the next public tag)
 
-### 1. Hide / remove `injectLogger` family from the public release
-- Evidence: `mc_logger` was called 2 times across 40 sessions, both 100% errored (`-javaagent:` flag was never set, so `LoggerService.UNAVAILABLE` returned).
-- Two options:
-  - **(a) Gate** the three handlers in [`BridgeServer.java:241-243`](mod/core/src/main/java/com/debugbridge/core/server/BridgeServer.java) behind a `BridgeConfig.loggerInjectionEnabled` flag (default false). Cheap.
-  - **(b) Build flavor split**: keep the agent + hooks modules out of the public jar entirely, dev-only.
-- Files involved: [`mod/core/src/main/java/com/debugbridge/core/logging/`](mod/core/src/main/java/com/debugbridge/core/logging/), [`mod/agent/`](mod/agent/), [`mod/hooks/`](mod/hooks/).
-- Effort: S (a) / M (b).
-- [ ] Done
+### 1. ~~Hide / remove `injectLogger` family from the public release~~
+- ~~Evidence: `mc_logger` was called 2 times across 40 sessions, both 100% errored.~~
+- **Done 2026-04-28** via option (a) gating: `BridgeConfig.loggerInjectionEnabled` (default false) → `BridgeServer.setLoggerInjectionEnabled` → injectLogger/cancelLogger/listLoggers cases return `Unknown request type` when off. mcdev-mcp side: `mc_logger` only registered when `MCDEV_LOGGER_INJECTION=1`. Both sides default off.
+- Re-enable (dev only): set `logger_injection_enabled: true` in `~/.minecraft/config/debugbridge.json` AND `MCDEV_LOGGER_INJECTION=1` for the mcdev-mcp process.
+- [x] Done
 
-### 2. Hide `runCommand` unless explicitly enabled
-- 2 calls, both errored. Same shape as #1.
-- Add `BridgeConfig.runCommandEnabled` (default false). Skip the `case "runCommand"` dispatch when off so the wrapper can return a clean "feature disabled" rather than a runtime crash.
-- Effort: S.
-- [ ] Done
+### 2. ~~Hide `runCommand` unless explicitly enabled~~
+- **Done 2026-04-28**, same shape as #1. Bridge: `BridgeConfig.runCommandEnabled` (default false) → `BridgeServer.setRunCommandEnabled` → returns `Unknown request type` when off. mcdev-mcp: `mc_run_command` only registered when `MCDEV_RUN_COMMAND=1`. Web UI's stale `bridge.runCommand` method has zero call-sites — gating off is non-breaking.
+- [x] Done
 
-### 3. Fix `mc_find_refs` `Cannot find module 'bindings'` crash (in mcdev-mcp)
-- Surfaces for any user who installs the public mcdev-mcp release. better-sqlite3 native binding issue.
-- Lives in `~/if-local/mcdev-mcp/`, not this repo — tracked here for visibility.
-- Effort: S.
-- [ ] Done
+### 3. ~~Fix `mc_find_refs` `Cannot find module 'bindings'` crash (in mcdev-mcp)~~
+- ~~Surfaces for any user who installs the public mcdev-mcp release. better-sqlite3 native binding issue.~~
+- **Resolved 2026-04-16** by migrating from `better-sqlite3` (native) → `node:sqlite` → `sql.js` (pure JS + WASM). Last occurrence: 2026-04-16 05:07 UTC; 0 errors across 50+ subsequent `mc_find_refs` calls. Migration commits in `~/if-local/mcdev-mcp/`: `31185a3`, `d6babbc`, `62e4ca5`.
+- [x] Done
 
 ## Tier 1 — high-leverage agent UX
 
-### 4. Wrap the existing native runtime endpoints as MCP tools  ← **highest leverage**
-- The bridge already implements `nearbyEntities`, `entityDetails`, `nearbyBlocks`, `blockDetails`, `lookedAtEntity`, `setEntityGlow`, `setBlockGlow`, `clearBlockGlow`, `getItemTexture`, `getEntityItemTexture`, `getItemTextureById` — **none are exposed in `mcdev-mcp/src/tools/runtime/index.ts`.**
-- Result: agents reach for `mc_execute` and re-implement the same loops in Lua. ~13 of 324 `mc_execute` calls timed out doing exactly the per-call bridge-cost iteration that `CLAUDE.md` warns against.
-- Action: add `mc_nearby_entities`, `mc_entity_details`, `mc_nearby_blocks`, `mc_block_details`, `mc_looked_at_entity`, `mc_set_entity_glow`, `mc_set_block_glow`, `mc_clear_block_glow`, `mc_get_item_texture` — TypeScript glue modeled on `snapshot.ts`.
-- Effort: S.
-- [ ] Done
+### 4. ~~Wrap the existing native runtime endpoints as MCP tools~~  ← was the highest leverage item
+- **Done 2026-04-28.** All 11 wrappers added in `~/if-local/mcdev-mcp/src/tools/runtime/`: `nearby-entities.ts`, `entity-details.ts`, `nearby-blocks.ts`, `block-details.ts`, `looked-at-entity.ts`, `set-entity-glow.ts`, `set-block-glow.ts`, `clear-block-glow.ts`, `get-item-texture.ts`, `get-entity-item-texture.ts`, `get-item-texture-by-id.ts`. All registered in `runtime/index.ts`. Default tool count went 7 → 15 (counting the dev-gated removals from #1, #2).
+- Open follow-ups now visible: agents will start using these instead of `mc_execute`, which means the `mc_execute` Lua-iteration timeouts should drop. Re-run the analysis in a few weeks to see if any new patterns emerge that suggest more wrappers (per #6 — chat history, screen inspect).
+- [x] Done
 
 ### 5. Enrich `snapshot` payload + advertise it in `mc_execute` description
 - ~53/324 `mc_execute` calls (16%) are pure player-state lookups (`x, y, z, dim, yaw`). `mc_snapshot` was called only 3 times — agents don't realize it serves this.
@@ -94,11 +86,11 @@ Two things to keep in mind while reading the rest:
 ## Tier 3 — for the next data-gathering cycle
 
 ### 10. Add lightweight per-request logging to `BridgeServer`
-- We currently only have agent-usage data because Claude Code keeps transcripts. Any other client (Cursor, Cline, custom agents, future Claude Code formats) gives us nothing.
-- Add `BridgeConfig.requestLog: String?` (default null = off). When set, [`BridgeServer.onMessage`](mod/core/src/main/java/com/debugbridge/core/server/BridgeServer.java) writes one JSON line per request: `{ts, type, payload_keys, duration_ms, success, error_class}`.
-- Don't log full payloads (Lua source can be large) — log shape + outcome. Add `payload_size_bytes` if useful.
-- Rotate or cap at a configured size to avoid runaway disk use.
-- This is what we *want* the "log feature" to be for, replacing the dead bytecode injector as the data-gathering tool.
+- **Partial progress 2026-04-28 (in mcdev-mcp, not luabridge):** new `ScriptLogger` writes `mc_execute` calls to `~/Library/Application Support/mcdev-mcp/script-logs/all.jsonl` + `errors.jsonl`, gated on `MCDEV_SCRIPT_LOGS=1` (or the Claude Desktop `enable_script_logging` toggle). 10MB rotation, 2 keep. New `mc_script_logs` tool exposes the file to agents. Files: `~/if-local/mcdev-mcp/src/tools/runtime/script-logger.ts` and `script-logs.ts`.
+- **Still open (the original ask):** server-side per-request logging in [`BridgeServer.onMessage`](mod/core/src/main/java/com/debugbridge/core/server/BridgeServer.java) covering **every** WebSocket request type. Today the script-logger only sees `mc_execute` (~16% of agent calls); the other 1700+ calls (`mc_search`/`mc_get_class`/etc.) are static-side and don't hit the bridge at all, but the runtime endpoints `mc_snapshot`/`mc_screenshot`/`mc_connect`/`mc_run_command`/`mc_logger` plus all the new entity/block endpoints are still invisible. Other agent clients (Cursor, Cline, Web UI, raw scripts) are also invisible.
+- Add `BridgeConfig.requestLog: String?` (default null = off). When set, [`BridgeServer.onMessage`](mod/core/src/main/java/com/debugbridge/core/server/BridgeServer.java) writes one JSON line per request: `{ts, type, payload_keys, payload_size_bytes, duration_ms, success, error_class}`.
+- **Don't log full payloads** (Lua source can be large; PII risk for command text) — log shape + outcome only. The mcdev-mcp script-logger currently logs full Lua code, which is fine for a dev-side opt-in but the wrong default for the bridge.
+- Rotate or cap at a configured size.
 - Effort: S.
 - [ ] Done
 

@@ -28,6 +28,20 @@ public class BridgeConfig {
      */
     public boolean developerModeAccepted = false;
 
+    /**
+     * Bytecode logger injection (-javaagent feature). Off by default; the agent
+     * jar is not in the public bundle, so enabling this without also loading
+     * the agent jar yields a clean "unavailable" error.
+     */
+    public boolean loggerInjectionEnabled = false;
+
+    /**
+     * Slash-command execution via the bridge. Off by default — the runtime
+     * still runs whatever Lua a connected client sends, so flipping this on
+     * only widens the surface for anyone authorized to drive the bridge.
+     */
+    public boolean runCommandEnabled = false;
+
     /** Path to the config file, set when loaded. */
     private transient Path configFile;
 
@@ -49,6 +63,12 @@ public class BridgeConfig {
             if (obj.has("max_results")) config.maxResults = obj.get("max_results").getAsInt();
             if (obj.has("developer_mode_accepted")) {
                 config.developerModeAccepted = obj.get("developer_mode_accepted").getAsBoolean();
+            }
+            if (obj.has("logger_injection_enabled")) {
+                config.loggerInjectionEnabled = obj.get("logger_injection_enabled").getAsBoolean();
+            }
+            if (obj.has("run_command_enabled")) {
+                config.runCommandEnabled = obj.get("run_command_enabled").getAsBoolean();
             }
             if (obj.has("lua")) {
                 JsonObject lua = obj.getAsJsonObject("lua");
@@ -77,6 +97,8 @@ public class BridgeConfig {
             obj.addProperty("timeout_ms", timeoutMs);
             obj.addProperty("max_results", maxResults);
             obj.addProperty("developer_mode_accepted", developerModeAccepted);
+            obj.addProperty("logger_injection_enabled", loggerInjectionEnabled);
+            obj.addProperty("run_command_enabled", runCommandEnabled);
             JsonObject lua = new JsonObject();
             lua.addProperty("max_execution_time_ms", luaMaxExecutionTimeMs);
             obj.add("lua", lua);

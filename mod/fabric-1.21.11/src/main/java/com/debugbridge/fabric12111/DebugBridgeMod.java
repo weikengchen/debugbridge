@@ -165,6 +165,8 @@ public class DebugBridgeMod implements ClientModInitializer {
             server.setEntitiesProvider(entitiesProvider);
             server.setBlocksProvider(blocksProvider);
             server.setLookedAtEntityProvider(lookedAtProvider);
+            server.setLoggerInjectionEnabled(config.loggerInjectionEnabled);
+            server.setRunCommandEnabled(config.runCommandEnabled);
 
             if (actualPort != config.port) {
                 startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";
