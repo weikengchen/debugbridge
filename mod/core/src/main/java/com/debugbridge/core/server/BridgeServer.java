@@ -701,8 +701,10 @@ public class BridgeServer extends WebSocketServer {
         }
         int limit = req.payload != null && req.payload.has("limit")
             ? req.payload.get("limit").getAsInt() : 50;
+        boolean includeJson = req.payload != null && req.payload.has("includeJson")
+            && req.payload.get("includeJson").getAsBoolean();
         try {
-            JsonArray messages = chatHistoryProvider.getRecentMessages(limit, resolver);
+            JsonArray messages = chatHistoryProvider.getRecentMessages(limit, resolver, includeJson);
             JsonObject result = new JsonObject();
             result.add("messages", messages);
             result.addProperty("count", messages.size());

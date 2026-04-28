@@ -3,10 +3,13 @@ package com.debugbridge.fabric12111;
 import com.debugbridge.core.chat.ChatHistoryProvider;
 import com.debugbridge.core.mapping.MappingResolver;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.mojang.serialization.JsonOps;
 import net.minecraft.client.GuiMessage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
+import net.minecraft.network.chat.ComponentSerialization;
 
 import java.lang.reflect.Field;
 import java.util.List;
@@ -16,7 +19,7 @@ public class Minecraft12111ChatHistoryProvider implements ChatHistoryProvider {
     private static volatile Field allMessagesField;
 
     @Override
-    public JsonArray getRecentMessages(int limit, MappingResolver resolver) throws Exception {
+    public JsonArray getRecentMessages(int limit, MappingResolver resolver, boolean includeJson) throws Exception {
         JsonArray out = new JsonArray();
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui == null) return out;
@@ -34,6 +37,18 @@ public class Minecraft12111ChatHistoryProvider implements ChatHistoryProvider {
             JsonObject obj = new JsonObject();
             obj.addProperty("plain", msg.content().getString());
             obj.addProperty("addedTime", msg.addedTime());
+            if (includeJson) {
+                try {
+                    JsonElement json = ComponentSerialization.CODEC
+                        .encodeStart(JsonOps.INSTANCE, msg.content())
+                        .getOrThrow();
+                    obj.add("json", json);
+                } catch (Exception ignore) {
+                    // Component contains a registry-bound element JsonOps can't
+                    // resolve (rare for chat). Skip the json field; plain is
+                    // still there.
+                }
+            }
             out.add(obj);
         }
         return out;

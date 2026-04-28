@@ -4,6 +4,7 @@ import com.debugbridge.core.chat.ChatHistoryProvider;
 import com.debugbridge.core.mapping.MappingResolver;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.network.chat.Component;
@@ -19,7 +20,7 @@ public class Minecraft119ChatHistoryProvider implements ChatHistoryProvider {
     private static volatile Field addedTimeField;
 
     @Override
-    public JsonArray getRecentMessages(int limit, MappingResolver resolver) throws Exception {
+    public JsonArray getRecentMessages(int limit, MappingResolver resolver, boolean includeJson) throws Exception {
         JsonArray out = new JsonArray();
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui == null) return out;
@@ -40,6 +41,14 @@ public class Minecraft119ChatHistoryProvider implements ChatHistoryProvider {
             Field timeF = addedTimeField(msg.getClass(), resolver);
             if (timeF != null) {
                 obj.addProperty("addedTime", timeF.getInt(msg));
+            }
+            if (includeJson && content instanceof Component c) {
+                try {
+                    String jsonStr = Component.Serializer.toJson(c);
+                    obj.add("json", JsonParser.parseString(jsonStr));
+                } catch (Exception ignore) {
+                    // Skip json field on serialization failure.
+                }
             }
             out.add(obj);
         }
