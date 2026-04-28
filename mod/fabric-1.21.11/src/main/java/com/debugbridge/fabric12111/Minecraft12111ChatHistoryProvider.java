@@ -1,6 +1,7 @@
 package com.debugbridge.fabric12111;
 
 import com.debugbridge.core.chat.ChatHistoryProvider;
+import com.debugbridge.core.mapping.MappingResolver;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import net.minecraft.client.GuiMessage;
@@ -15,7 +16,7 @@ public class Minecraft12111ChatHistoryProvider implements ChatHistoryProvider {
     private static volatile Field allMessagesField;
 
     @Override
-    public JsonArray getRecentMessages(int limit) throws Exception {
+    public JsonArray getRecentMessages(int limit, MappingResolver resolver) throws Exception {
         JsonArray out = new JsonArray();
         Minecraft mc = Minecraft.getInstance();
         if (mc.gui == null) return out;
@@ -23,7 +24,7 @@ public class Minecraft12111ChatHistoryProvider implements ChatHistoryProvider {
         if (chat == null) return out;
 
         @SuppressWarnings("unchecked")
-        List<GuiMessage> messages = (List<GuiMessage>) allMessagesField().get(chat);
+        List<GuiMessage> messages = (List<GuiMessage>) allMessagesField(resolver).get(chat);
         if (messages == null) return out;
 
         // ChatComponent stores newest-first; honor that.
@@ -38,10 +39,12 @@ public class Minecraft12111ChatHistoryProvider implements ChatHistoryProvider {
         return out;
     }
 
-    private static Field allMessagesField() throws NoSuchFieldException {
+    private static Field allMessagesField(MappingResolver resolver) throws NoSuchFieldException {
         Field f = allMessagesField;
         if (f != null) return f;
-        f = ChatComponent.class.getDeclaredField("allMessages");
+        String runtime = resolver.resolveField(
+            "net.minecraft.client.gui.components.ChatComponent", "allMessages");
+        f = ChatComponent.class.getDeclaredField(runtime);
         f.setAccessible(true);
         allMessagesField = f;
         return f;

@@ -147,16 +147,18 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
     }
 
     /**
-     * If {@code method}'s declaring class is in a JPMS module that doesn't
-     * export its package to us (e.g. {@code java.util.HashMap$KeySet}), find
-     * the same signature on an exported interface or superclass and return
-     * that {@link Method} instead. Falls back to the original if no
-     * accessible equivalent exists.
+     * If {@code method}'s declaring class is not reachable for reflective
+     * setAccessible from our module — either because the package isn't
+     * exported (e.g. an internal jdk.* type) or because the class itself is
+     * package-private (e.g. {@code java.util.HashMap$KeySet} or
+     * {@code java.util.HashMap$Node}, both inside the exported {@code java.util}
+     * package) — find the same signature on a reachable interface or superclass
+     * and return that {@link Method} instead. Falls back to the original if no
+     * reachable equivalent exists.
      */
     private static Method preferAccessibleMethod(Method method) {
         Class<?> dc = method.getDeclaringClass();
-        Module ours = MethodCallWrapper.class.getModule();
-        if (dc.getModule().isExported(dc.getPackageName(), ours)) {
+        if (isReachable(dc)) {
             return method;
         }
         Set<Class<?>> hierarchy = new LinkedHashSet<>();
@@ -165,12 +167,25 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
         Class<?>[] params = method.getParameterTypes();
         for (Class<?> c : hierarchy) {
             if (c == dc) continue;
-            if (!c.getModule().isExported(c.getPackageName(), ours)) continue;
+            if (!isReachable(c)) continue;
             try {
                 return c.getDeclaredMethod(name, params);
             } catch (NoSuchMethodException ignore) {}
         }
         return method;
+    }
+
+    /**
+     * A class is reachable for setAccessible from our module iff its package
+     * is exported to us AND the class itself is public. The package-export
+     * check on its own isn't enough: HashMap$Node lives in the exported
+     * java.util package but is package-private, so reflective access still
+     * fails the module-open check.
+     */
+    private static boolean isReachable(Class<?> cls) {
+        Module ours = MethodCallWrapper.class.getModule();
+        return cls.getModule().isExported(cls.getPackageName(), ours)
+            && Modifier.isPublic(cls.getModifiers());
     }
 
     /** Backwards-compat helper kept for {@link #findBestMatch}. */
