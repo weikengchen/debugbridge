@@ -1,6 +1,7 @@
 package com.debugbridge.fabric12111;
 
 import com.debugbridge.core.BridgeConfig;
+import com.debugbridge.core.block.ClientBlockGlowManager;
 import com.debugbridge.core.lua.ThreadDispatcher;
 import com.debugbridge.core.mapping.MappingCache;
 import com.debugbridge.core.mapping.MappingDownloader;
@@ -16,6 +17,13 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,6 +93,8 @@ public class DebugBridgeMod implements ClientModInitializer {
             startupInfo = null;
         }
 
+        refreshBlockGlow(mc);
+
         if (!needsWarning) return;
 
         // Only show once, and only when no screen is open (game is ready)
@@ -100,6 +110,17 @@ public class DebugBridgeMod implements ClientModInitializer {
                 }
                 needsWarning = false;
             }));
+        }
+    }
+
+    private void refreshBlockGlow(Minecraft mc) {
+        LevelRenderer lr = mc.levelRenderer;
+        if (lr == null) return;
+        var glowing = ClientBlockGlowManager.snapshot();
+        if (glowing.isEmpty()) return;
+        for (var p : glowing) {
+            BlockPos pos = new BlockPos(p.x(), p.y(), p.z());
+            lr.gameTestBlockHighlightRenderer.highlightPos(pos, pos);
         }
     }
 
@@ -133,6 +154,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         ScreenshotProvider screenshotProvider = new Minecraft12111ScreenshotProvider();
         ItemTextureProvider textureProvider = new Minecraft12111ItemTextureProvider();
         Minecraft12111NearbyEntitiesProvider entitiesProvider = new Minecraft12111NearbyEntitiesProvider();
+        Minecraft12111NearbyBlocksProvider blocksProvider = new Minecraft12111NearbyBlocksProvider();
         Minecraft12111LookedAtEntityProvider lookedAtProvider = new Minecraft12111LookedAtEntityProvider();
 
         // Find available port and start server
@@ -146,7 +168,12 @@ public class DebugBridgeMod implements ClientModInitializer {
             // Register providers (use setters to avoid widening constructor)
             server.setTextureProvider(textureProvider);
             server.setEntitiesProvider(entitiesProvider);
+            server.setBlocksProvider(blocksProvider);
             server.setLookedAtEntityProvider(lookedAtProvider);
+            server.setChatHistoryProvider(new Minecraft12111ChatHistoryProvider());
+            server.setScreenInspectProvider(new Minecraft12111ScreenInspectProvider());
+            server.setLoggerInjectionEnabled(config.loggerInjectionEnabled);
+            server.setRunCommandEnabled(config.runCommandEnabled);
 
             if (actualPort != config.port) {
                 startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";
@@ -251,6 +278,9 @@ public class DebugBridgeMod implements ClientModInitializer {
                 playerObj.addProperty("x", player.getX());
                 playerObj.addProperty("y", player.getY());
                 playerObj.addProperty("z", player.getZ());
+                playerObj.addProperty("yaw", player.getYRot());
+                playerObj.addProperty("pitch", player.getXRot());
+                playerObj.addProperty("hotbarSlot", player.getInventory().getSelectedSlot());
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("maxHealth", player.getMaxHealth());
                 playerObj.addProperty("food", player.getFoodData().getFoodLevel());
@@ -258,9 +288,41 @@ public class DebugBridgeMod implements ClientModInitializer {
                 playerObj.addProperty("dimension",
                     player.level().dimension().identifier().toString());
                 playerObj.addProperty("biome", "");
+                Vec3 vel = player.getDeltaMovement();
+                JsonObject velObj = new JsonObject();
+                velObj.addProperty("x", vel.x); velObj.addProperty("y", vel.y); velObj.addProperty("z", vel.z);
+                playerObj.add("velocity", velObj);
+                Vec3 look = player.getLookAngle();
+                JsonObject lookObj = new JsonObject();
+                lookObj.addProperty("x", look.x); lookObj.addProperty("y", look.y); lookObj.addProperty("z", look.z);
+                playerObj.add("look", lookObj);
+                Entity vehicle = player.getVehicle();
+                if (vehicle != null) {
+                    JsonObject vObj = new JsonObject();
+                    vObj.addProperty("entityId", vehicle.getId());
+                    vObj.addProperty("type", vehicle.getClass().getName());
+                    playerObj.add("vehicle", vObj);
+                }
                 snap.add("player", playerObj);
             } else {
                 snap.addProperty("player", "not in world");
+            }
+
+            HitResult hit = mc.hitResult;
+            if (hit != null && hit.getType() != HitResult.Type.MISS) {
+                JsonObject target = new JsonObject();
+                target.addProperty("type", hit.getType().name().toLowerCase());
+                if (hit instanceof BlockHitResult bhr) {
+                    BlockPos pos = bhr.getBlockPos();
+                    target.addProperty("x", pos.getX());
+                    target.addProperty("y", pos.getY());
+                    target.addProperty("z", pos.getZ());
+                    target.addProperty("face", bhr.getDirection().name().toLowerCase());
+                } else if (hit instanceof EntityHitResult ehr) {
+                    target.addProperty("entityId", ehr.getEntity().getId());
+                    target.addProperty("entityType", ehr.getEntity().getClass().getName());
+                }
+                snap.add("target", target);
             }
 
             if (mc.level != null) {

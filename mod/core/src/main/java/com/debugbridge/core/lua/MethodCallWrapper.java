@@ -78,6 +78,11 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
                     + " args on " + mojangClass + suggestMethods());
             }
 
+            // If the declaring class is in a JPMS-sealed module (e.g.
+            // HashMap$KeySet inside java.util), try the same signature on a
+            // JPMS-accessible interface / superclass first. setAccessible(true)
+            // would otherwise throw InaccessibleObjectException.
+            method = preferAccessibleMethod(method);
             method.setAccessible(true);
 
             // Convert args to match parameter types
@@ -139,6 +144,33 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
                 queue.add(superIface);
             }
         }
+    }
+
+    /**
+     * If {@code method}'s declaring class is in a JPMS module that doesn't
+     * export its package to us (e.g. {@code java.util.HashMap$KeySet}), find
+     * the same signature on an exported interface or superclass and return
+     * that {@link Method} instead. Falls back to the original if no
+     * accessible equivalent exists.
+     */
+    private static Method preferAccessibleMethod(Method method) {
+        Class<?> dc = method.getDeclaringClass();
+        Module ours = MethodCallWrapper.class.getModule();
+        if (dc.getModule().isExported(dc.getPackageName(), ours)) {
+            return method;
+        }
+        Set<Class<?>> hierarchy = new LinkedHashSet<>();
+        collectHierarchy(dc, hierarchy);
+        String name = method.getName();
+        Class<?>[] params = method.getParameterTypes();
+        for (Class<?> c : hierarchy) {
+            if (c == dc) continue;
+            if (!c.getModule().isExported(c.getPackageName(), ours)) continue;
+            try {
+                return c.getDeclaredMethod(name, params);
+            } catch (NoSuchMethodException ignore) {}
+        }
+        return method;
     }
 
     /** Backwards-compat helper kept for {@link #findBestMatch}. */

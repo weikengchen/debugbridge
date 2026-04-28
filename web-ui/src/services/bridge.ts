@@ -266,6 +266,28 @@ class BridgeService {
     const result = resp.result as { entityId: number | null };
     return result.entityId;
   }
+
+  async getNearbyBlocks(range: number, limit: number): Promise<{ blocks: unknown[]; count: number }> {
+    const resp = await this.send('nearbyBlocks', { range, limit });
+    if (!resp.success) throw new Error(resp.error || 'Block query failed');
+    return resp.result as { blocks: unknown[]; count: number };
+  }
+
+  async getBlockDetails(x: number, y: number, z: number): Promise<Record<string, unknown>> {
+    const resp = await this.send('blockDetails', { x, y, z });
+    if (!resp.success) throw new Error(resp.error || 'Block details failed');
+    return resp.result as Record<string, unknown>;
+  }
+
+  async setBlockGlow(x: number, y: number, z: number, glow: boolean): Promise<void> {
+    const resp = await this.send('setBlockGlow', { x, y, z, glow });
+    if (!resp.success) throw new Error(resp.error || 'Set block glow failed');
+  }
+
+  async clearBlockGlow(): Promise<void> {
+    const resp = await this.send('clearBlockGlow', {});
+    if (!resp.success) throw new Error(resp.error || 'Clear block glow failed');
+  }
 }
 
 // Singleton instance

@@ -7,6 +7,7 @@ import com.debugbridge.core.mapping.MappingDownloader;
 import com.debugbridge.core.mapping.ProGuardParser;
 import com.debugbridge.core.mapping.ParsedMappings;
 import com.debugbridge.core.mapping.MappingResolver;
+import com.debugbridge.core.block.NearbyBlocksProvider;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.server.BridgeServer;
@@ -17,10 +18,16 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
+import net.minecraft.world.phys.HitResult;
+import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import net.minecraft.network.chat.Component;
+import net.minecraft.core.BlockPos;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -133,6 +140,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         GameStateProvider stateProvider = new Minecraft119StateProvider();
         ScreenshotProvider screenshotProvider = new Minecraft119ScreenshotProvider();
         NearbyEntitiesProvider entitiesProvider = new Minecraft119NearbyEntitiesProvider();
+        NearbyBlocksProvider blocksProvider = new Minecraft119NearbyBlocksProvider();
         ItemTextureProvider textureProvider = new Minecraft119ItemTextureProvider();
         Minecraft119LookedAtEntityProvider lookedAtProvider = new Minecraft119LookedAtEntityProvider();
 
@@ -145,8 +153,13 @@ public class DebugBridgeMod implements ClientModInitializer {
             startupError = msg;
         } else {
             server.setEntitiesProvider(entitiesProvider);
+            server.setBlocksProvider(blocksProvider);
             server.setTextureProvider(textureProvider);
             server.setLookedAtEntityProvider(lookedAtProvider);
+            server.setChatHistoryProvider(new Minecraft119ChatHistoryProvider());
+            server.setScreenInspectProvider(new Minecraft119ScreenInspectProvider());
+            server.setLoggerInjectionEnabled(config.loggerInjectionEnabled);
+            server.setRunCommandEnabled(config.runCommandEnabled);
 
             if (actualPort != config.port) {
                 startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";
@@ -254,6 +267,9 @@ public class DebugBridgeMod implements ClientModInitializer {
                 playerObj.addProperty("x", player.getX());
                 playerObj.addProperty("y", player.getY());
                 playerObj.addProperty("z", player.getZ());
+                playerObj.addProperty("yaw", player.getYRot());
+                playerObj.addProperty("pitch", player.getXRot());
+                playerObj.addProperty("hotbarSlot", player.getInventory().selected);
                 playerObj.addProperty("health", player.getHealth());
                 playerObj.addProperty("maxHealth", player.getMaxHealth());
                 playerObj.addProperty("food", player.getFoodData().getFoodLevel());
@@ -261,9 +277,41 @@ public class DebugBridgeMod implements ClientModInitializer {
                 playerObj.addProperty("dimension",
                     player.level.dimension().location().toString());
                 playerObj.addProperty("biome", ""); // Would need world access
+                Vec3 vel = player.getDeltaMovement();
+                JsonObject velObj = new JsonObject();
+                velObj.addProperty("x", vel.x); velObj.addProperty("y", vel.y); velObj.addProperty("z", vel.z);
+                playerObj.add("velocity", velObj);
+                Vec3 look = player.getLookAngle();
+                JsonObject lookObj = new JsonObject();
+                lookObj.addProperty("x", look.x); lookObj.addProperty("y", look.y); lookObj.addProperty("z", look.z);
+                playerObj.add("look", lookObj);
+                Entity vehicle = player.getVehicle();
+                if (vehicle != null) {
+                    JsonObject vObj = new JsonObject();
+                    vObj.addProperty("entityId", vehicle.getId());
+                    vObj.addProperty("type", vehicle.getClass().getName());
+                    playerObj.add("vehicle", vObj);
+                }
                 snap.add("player", playerObj);
             } else {
                 snap.addProperty("player", "not in world");
+            }
+
+            HitResult hit = mc.hitResult;
+            if (hit != null && hit.getType() != HitResult.Type.MISS) {
+                JsonObject target = new JsonObject();
+                target.addProperty("type", hit.getType().name().toLowerCase());
+                if (hit instanceof BlockHitResult bhr) {
+                    BlockPos pos = bhr.getBlockPos();
+                    target.addProperty("x", pos.getX());
+                    target.addProperty("y", pos.getY());
+                    target.addProperty("z", pos.getZ());
+                    target.addProperty("face", bhr.getDirection().name().toLowerCase());
+                } else if (hit instanceof EntityHitResult ehr) {
+                    target.addProperty("entityId", ehr.getEntity().getId());
+                    target.addProperty("entityType", ehr.getEntity().getClass().getName());
+                }
+                snap.add("target", target);
             }
 
             // World info

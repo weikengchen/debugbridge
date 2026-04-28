@@ -1,13 +1,19 @@
 package com.debugbridge.fabric119;
 
 import com.debugbridge.core.texture.ItemTextureProvider;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.mojang.blaze3d.platform.NativeImage;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.color.item.ItemColors;
 import net.minecraft.client.renderer.block.model.BakedQuad;
 import net.minecraft.client.renderer.texture.TextureAtlasSprite;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Registry;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -23,10 +29,14 @@ import net.minecraft.world.level.saveddata.maps.MapItemSavedData;
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.lang.reflect.Field;
+import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Logger;
 
@@ -43,6 +53,12 @@ public class Minecraft119ItemTextureProvider implements ItemTextureProvider {
 
     // Reflection cache: TextureAtlasSprite → NativeImage[] field
     private static volatile Field spritePixelsField;
+
+    // Reflection cache: Minecraft → ItemColors field (private, no accessor in 1.19).
+    private static volatile ItemColors cachedItemColors;
+
+    // Cache of fetched skin PNGs keyed by CDN URL.
+    private static final ConcurrentHashMap<String, NativeImage> SKIN_CACHE = new ConcurrentHashMap<>();
 
     @Override
     public TextureResult getItemTexture(int slot) throws Exception {
@@ -106,66 +122,51 @@ public class Minecraft119ItemTextureProvider implements ItemTextureProvider {
 
     private TextureResult renderStack(StackSupplier supplier) throws Exception {
         Minecraft mc = Minecraft.getInstance();
-        CompletableFuture<TextureResult> future = new CompletableFuture<>();
 
+        // Phase 1 (render thread): resolve the ItemStack + try the filled-map
+        // fast path. Stack resolution must touch level/player state.
+        CompletableFuture<StackOrResult> phase1 = new CompletableFuture<>();
         mc.execute(() -> {
             try {
                 ItemStack stack = supplier.get();
-
-                // Fast path: filled_map renders the actual map content (128x128
-                // pixel grid via MaterialColor palette), not the inventory icon.
                 TextureResult mapResult = tryRenderFilledMap(mc, stack);
                 if (mapResult != null) {
-                    future.complete(mapResult);
+                    phase1.complete(new StackOrResult(null, mapResult));
                     return;
                 }
-
-                BakedModel model = mc.getItemRenderer().getModel(stack, mc.level, mc.player, 0);
-
-                TextureAtlasSprite sprite = findPrimarySprite(model);
-                if (sprite == null) {
-                    future.completeExceptionally(new Exception("No sprite found for item"));
-                    return;
-                }
-
-                NativeImage img = getSpriteMainImage(sprite);
-                if (img == null) {
-                    future.completeExceptionally(new Exception("Sprite has no pixel data"));
-                    return;
-                }
-
-                int w = img.getWidth();
-                int h = img.getHeight();
-                BufferedImage bi = new BufferedImage(w, h, BufferedImage.TYPE_INT_ARGB);
-
-                for (int y = 0; y < h; y++) {
-                    for (int x = 0; x < w; x++) {
-                        int abgr = img.getPixelRGBA(x, y);
-                        int a = (abgr >> 24) & 0xFF;
-                        int b = (abgr >> 16) & 0xFF;
-                        int g = (abgr >> 8) & 0xFF;
-                        int r = abgr & 0xFF;
-                        bi.setRGB(x, y, (a << 24) | (r << 16) | (g << 8) | b);
-                    }
-                }
-
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                ImageIO.write(bi, "png", baos);
-                String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
-
-                future.complete(new TextureResult(base64, w, h, getSpriteName(sprite)));
+                phase1.complete(new StackOrResult(stack, null));
             } catch (Exception e) {
-                future.completeExceptionally(e);
+                phase1.completeExceptionally(e);
             }
         });
+        StackOrResult p1 = phase1.get(10, TimeUnit.SECONDS);
+        if (p1.result != null) return p1.result;
+        ItemStack stack = p1.stack;
 
-        return future.get(10, TimeUnit.SECONDS);
+        // Phase 2 (calling/WebSocket thread): custom-head face from NBT profile.
+        // May block on HTTP, so it MUST NOT run on the render thread.
+        TextureResult headResult = tryRenderHeadFromProfile(stack);
+        if (headResult != null) return headResult;
+
+        // Phase 3 (render thread): walk the baked model and composite quads.
+        CompletableFuture<TextureResult> phase3 = new CompletableFuture<>();
+        mc.execute(() -> {
+            try {
+                BakedModel model = mc.getItemRenderer().getModel(stack, mc.level, mc.player, 0);
+                phase3.complete(renderFromBakedModel(stack, model, mc));
+            } catch (Exception e) {
+                phase3.completeExceptionally(e);
+            }
+        });
+        return phase3.get(10, TimeUnit.SECONDS);
     }
 
     @FunctionalInterface
     private interface StackSupplier {
         ItemStack get() throws Exception;
     }
+
+    private record StackOrResult(ItemStack stack, TextureResult result) {}
 
     // ---- Filled-map rendering (bypasses the baked model pipeline) ----
 
@@ -208,26 +209,215 @@ public class Minecraft119ItemTextureProvider implements ItemTextureProvider {
         return (0xFF << 24) | (r << 16) | (g << 8) | b;
     }
 
+    // ---- Custom-head face from profile NBT ----
+
     /**
-     * Find the primary sprite for a baked model. For flat (generated) item
-     * models, the quads on the SOUTH face are the item's front texture. For
-     * block models, fall back to the particle icon.
+     * For a player head whose NBT carries a texture profile, decode the profile,
+     * fetch the skin PNG from the Mojang CDN, and composite the face + hat
+     * overlay into a 16×16 icon. Returns null for anything that isn't a
+     * profile-backed head, or if fetch/decoding fails.
+     *
+     * Runs on the caller thread — blocking HTTP is safe here.
      */
-    private TextureAtlasSprite findPrimarySprite(BakedModel model) {
-        // Try SOUTH face quads (the flat front for item icons)
+    private TextureResult tryRenderHeadFromProfile(ItemStack stack) {
+        if (!stack.is(Items.PLAYER_HEAD)) return null;
+
+        try {
+            CompoundTag tag = stack.getTag();
+            if (tag == null || !tag.contains("SkullOwner", Tag.TAG_COMPOUND)) return null;
+            CompoundTag owner = tag.getCompound("SkullOwner");
+            if (!owner.contains("Properties", Tag.TAG_COMPOUND)) return null;
+            CompoundTag props = owner.getCompound("Properties");
+            if (!props.contains("textures", Tag.TAG_LIST)) return null;
+            ListTag textures = props.getList("textures", Tag.TAG_COMPOUND);
+            if (textures.isEmpty()) return null;
+            String value = textures.getCompound(0).getString("Value");
+            if (value == null || value.isEmpty()) return null;
+
+            byte[] decoded = Base64.getDecoder().decode(value);
+            JsonObject root = JsonParser.parseString(new String(decoded, StandardCharsets.UTF_8))
+                    .getAsJsonObject();
+            JsonObject texturesObj = root.getAsJsonObject("textures");
+            if (texturesObj == null) return null;
+            JsonObject skin = texturesObj.getAsJsonObject("SKIN");
+            if (skin == null || !skin.has("url")) return null;
+            String url = skin.get("url").getAsString();
+            if (url == null || url.isEmpty()) return null;
+
+            NativeImage skinImg = fetchSkin(url);
+            if (skinImg == null) return null;
+
+            int sw = skinImg.getWidth();
+            int sh = skinImg.getHeight();
+            if (sw < 16 || sh < 16) return null;
+
+            boolean hasHat = sw >= 48 && sh >= 16;
+
+            // Face lives at (8,8)-(16,16); hat overlay at (40,8)-(48,16).
+            // Upscale 2× into a 16×16 output.
+            BufferedImage out = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB);
+            for (int y = 0; y < 8; y++) {
+                for (int x = 0; x < 8; x++) {
+                    int face = nativeToArgb(skinImg.getPixelRGBA(8 + x, 8 + y));
+                    int argb = face;
+                    if (hasHat) {
+                        int hat = nativeToArgb(skinImg.getPixelRGBA(40 + x, 8 + y));
+                        argb = alphaOver(hat, face);
+                    }
+                    int ox = x * 2;
+                    int oy = y * 2;
+                    out.setRGB(ox, oy, argb);
+                    out.setRGB(ox + 1, oy, argb);
+                    out.setRGB(ox, oy + 1, argb);
+                    out.setRGB(ox + 1, oy + 1, argb);
+                }
+            }
+
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(out, "png", baos);
+            String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+
+            int lastSlash = url.lastIndexOf('/');
+            String hash = (lastSlash >= 0 && lastSlash < url.length() - 1)
+                    ? url.substring(lastSlash + 1)
+                    : url;
+            String shortHash = hash.length() > 16 ? hash.substring(0, 16) : hash;
+
+            return new TextureResult(base64, 16, 16, "head[" + shortHash + "]");
+        } catch (Exception e) {
+            LOG.warning("[DebugBridge] Head profile render failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private NativeImage fetchSkin(String url) throws Exception {
+        NativeImage cached = SKIN_CACHE.get(url);
+        if (cached != null) return cached;
+        try (InputStream in = new URL(url).openStream()) {
+            NativeImage img = NativeImage.read(in);
+            NativeImage prev = SKIN_CACHE.putIfAbsent(url, img);
+            if (prev != null) {
+                img.close();
+                return prev;
+            }
+            return img;
+        }
+    }
+
+    // ---- Baked-model rendering with tint compositing ----
+
+    /**
+     * Composite a baked item model's sprites onto a single canvas, applying
+     * per-quad tint via {@link ItemColors}. Needed because dyed leather armor,
+     * potions, tipped arrows, spawn eggs, and firework stars encode their color
+     * as a tint that's applied at render time — the sprites alone are grayscale
+     * or uncolored.
+     *
+     * Multi-layer items (e.g. leather armor's body + stitching) are handled by
+     * compositing each quad's sprite in order over the canvas.
+     */
+    private TextureResult renderFromBakedModel(ItemStack stack, BakedModel model, Minecraft mc) throws Exception {
         List<BakedQuad> quads = model.getQuads(null, Direction.SOUTH, null);
-        if (!quads.isEmpty()) {
-            return quads.get(0).getSprite();
+        if (quads.isEmpty()) {
+            quads = model.getQuads(null, null, null);
         }
 
-        // Try unculled quads (some block-style items)
-        quads = model.getQuads(null, null, null);
-        if (!quads.isEmpty()) {
-            return quads.get(0).getSprite();
+        TextureAtlasSprite[] sprites;
+        int[] tintIndices;
+        if (quads.isEmpty()) {
+            TextureAtlasSprite particle = model.getParticleIcon();
+            if (particle == null) throw new Exception("No sprite found for item");
+            sprites = new TextureAtlasSprite[] { particle };
+            tintIndices = new int[] { -1 };
+        } else {
+            sprites = new TextureAtlasSprite[quads.size()];
+            tintIndices = new int[quads.size()];
+            for (int i = 0; i < quads.size(); i++) {
+                BakedQuad q = quads.get(i);
+                sprites[i] = q.getSprite();
+                tintIndices[i] = q.getTintIndex();
+            }
         }
 
-        // Fall back to particle icon
-        return model.getParticleIcon();
+        NativeImage[] imgs = new NativeImage[sprites.length];
+        int maxW = 0, maxH = 0;
+        for (int i = 0; i < sprites.length; i++) {
+            NativeImage img = getSpriteMainImage(sprites[i]);
+            if (img == null) continue;
+            imgs[i] = img;
+            if (img.getWidth() > maxW) maxW = img.getWidth();
+            if (img.getHeight() > maxH) maxH = img.getHeight();
+        }
+        if (maxW == 0 || maxH == 0) {
+            throw new Exception("Sprite has no pixel data");
+        }
+
+        BufferedImage canvas = new BufferedImage(maxW, maxH, BufferedImage.TYPE_INT_ARGB);
+        ItemColors itemColors = resolveItemColors(mc);
+
+        for (int i = 0; i < sprites.length; i++) {
+            NativeImage img = imgs[i];
+            if (img == null) continue;
+            int tintIndex = tintIndices[i];
+            boolean applyTint = tintIndex >= 0 && itemColors != null;
+            int tint = applyTint ? itemColors.getColor(stack, tintIndex) : 0xFFFFFFFF;
+            int tr = (tint >> 16) & 0xFF;
+            int tg = (tint >> 8) & 0xFF;
+            int tb = tint & 0xFF;
+
+            int w = img.getWidth();
+            int h = img.getHeight();
+            for (int y = 0; y < h; y++) {
+                for (int x = 0; x < w; x++) {
+                    int argb = nativeToArgb(img.getPixelRGBA(x, y));
+                    if (applyTint) {
+                        int a = (argb >> 24) & 0xFF;
+                        int r = ((argb >> 16) & 0xFF) * tr / 255;
+                        int g = ((argb >> 8) & 0xFF) * tg / 255;
+                        int b = (argb & 0xFF) * tb / 255;
+                        argb = (a << 24) | (r << 16) | (g << 8) | b;
+                    }
+                    canvas.setRGB(x, y, alphaOver(argb, canvas.getRGB(x, y)));
+                }
+            }
+        }
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        ImageIO.write(canvas, "png", baos);
+        String base64 = Base64.getEncoder().encodeToString(baos.toByteArray());
+        return new TextureResult(base64, maxW, maxH, getSpriteName(sprites[0]));
+    }
+
+    // ---- Pixel helpers ----
+
+    /** Convert NativeImage's little-endian ABGR packing to standard ARGB. */
+    private static int nativeToArgb(int abgr) {
+        int a = (abgr >>> 24) & 0xFF;
+        int b = (abgr >> 16) & 0xFF;
+        int g = (abgr >> 8) & 0xFF;
+        int r = abgr & 0xFF;
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    /** Standard "source over" alpha compositing — top pixel drawn over bottom. */
+    private static int alphaOver(int topArgb, int bottomArgb) {
+        int ta = (topArgb >>> 24) & 0xFF;
+        if (ta == 0) return bottomArgb;
+        if (ta == 255) return topArgb;
+        int ba = (bottomArgb >>> 24) & 0xFF;
+        int tr = (topArgb >> 16) & 0xFF;
+        int tg = (topArgb >> 8) & 0xFF;
+        int tb = topArgb & 0xFF;
+        int br = (bottomArgb >> 16) & 0xFF;
+        int bg = (bottomArgb >> 8) & 0xFF;
+        int bb = bottomArgb & 0xFF;
+        int invTa = 255 - ta;
+        int outA = ta + ba * invTa / 255;
+        if (outA == 0) return 0;
+        int outR = (tr * ta + br * ba * invTa / 255) / outA;
+        int outG = (tg * ta + bg * ba * invTa / 255) / outA;
+        int outB = (tb * ta + bb * ba * invTa / 255) / outA;
+        return (outA << 24) | (outR << 16) | (outG << 8) | outB;
     }
 
     /**
@@ -296,6 +486,35 @@ public class Minecraft119ItemTextureProvider implements ItemTextureProvider {
         } catch (Exception ignored) {
         }
         return "";
+    }
+
+    /**
+     * Look up {@link ItemColors} on the {@link Minecraft} instance via reflection.
+     * In 1.19 the field is private with no accessor, so we can't call a getter.
+     * Returns null on failure; callers should skip tint in that case.
+     */
+    private static ItemColors resolveItemColors(Minecraft mc) {
+        ItemColors cached = cachedItemColors;
+        if (cached != null) return cached;
+        try {
+            Class<?> c = Minecraft.class;
+            while (c != null && c != Object.class) {
+                for (Field f : c.getDeclaredFields()) {
+                    if (f.getType() == ItemColors.class) {
+                        f.setAccessible(true);
+                        ItemColors ic = (ItemColors) f.get(mc);
+                        if (ic != null) {
+                            cachedItemColors = ic;
+                            return ic;
+                        }
+                    }
+                }
+                c = c.getSuperclass();
+            }
+        } catch (Exception e) {
+            LOG.warning("[DebugBridge] Failed to resolve ItemColors via reflection: " + e.getMessage());
+        }
+        return null;
     }
 
     private static Field findNativeImageArrayField(Class<?> cls) {
