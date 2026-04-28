@@ -10,7 +10,7 @@ import com.google.gson.JsonArray;
  * per field on each message).
  */
 public interface ChatHistoryProvider {
-
+    
     /**
      * Get the most recent chat messages, newest first.
      *
@@ -21,7 +21,7 @@ public interface ChatHistoryProvider {
      *                 rewrite reflective string lookups, so the provider
      *                 must do this mapping itself.
      * @return JSON array of {plain, addedTime} where addedTime is the tick at
-     *         which the message was added (Minecraft's GuiMessage.addedTime).
+     * which the message was added (Minecraft's GuiMessage.addedTime).
      * @throws Exception on query failure
      */
     JsonArray getRecentMessages(int limit, MappingResolver resolver) throws Exception;

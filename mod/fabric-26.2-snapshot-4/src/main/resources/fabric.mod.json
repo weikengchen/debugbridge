@@ -1,31 +1,33 @@
 {
-    "schemaVersion": 1,
-    "id": "debugbridge",
-    "version": "${version}",
-    "name": "DebugBridge 26.2 Snapshot Bridge",
-    "description": "DebugBridge development build for Minecraft 26.2-snapshot-4 with boot path parity and full provider coverage.",
-    "authors": ["Weikeng Chen"],
-    "contact": {
-        "homepage": "https://github.com/weikengchen/debugbridge",
-        "sources": "https://github.com/weikengchen/debugbridge",
-        "issues": "https://github.com/weikengchen/debugbridge/issues"
-    },
-    "license": "MIT",
-    "icon": "assets/debugbridge/icon.png",
-    "environment": "client",
-    "mixins": [
-        "debugbridge.mixins.json"
-    ],
-    "entrypoints": {
-        "client": [
-            "com.debugbridge.fabric262.DebugBridgeMod"
-        ]
-    },
-    "depends": {
-        "fabricloader": ">=0.19.2",
-        "minecraft": [
-            "26.2-snapshot-4",
-            "26.2-alpha.4"
-        ]
-    }
+  "schemaVersion": 1,
+  "id": "debugbridge",
+  "version": "${version}",
+  "name": "DebugBridge 26.2 Snapshot Bridge",
+  "description": "DebugBridge development build for Minecraft 26.2-snapshot-4 with boot path parity and full provider coverage.",
+  "authors": [
+    "Weikeng Chen"
+  ],
+  "contact": {
+    "homepage": "https://github.com/weikengchen/debugbridge",
+    "sources": "https://github.com/weikengchen/debugbridge",
+    "issues": "https://github.com/weikengchen/debugbridge/issues"
+  },
+  "license": "MIT",
+  "icon": "assets/debugbridge/icon.png",
+  "environment": "client",
+  "mixins": [
+    "debugbridge.mixins.json"
+  ],
+  "entrypoints": {
+    "client": [
+      "com.debugbridge.fabric262.DebugBridgeMod"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.19.2",
+    "minecraft": [
+      "26.2-snapshot-4",
+      "26.2-alpha.4"
+    ]
+  }
 }

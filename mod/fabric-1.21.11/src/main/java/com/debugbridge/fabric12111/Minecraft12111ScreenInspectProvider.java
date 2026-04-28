@@ -13,7 +13,7 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 
 public class Minecraft12111ScreenInspectProvider implements ScreenInspectProvider {
-
+    
     @Override
     public JsonObject inspectCurrentScreen() throws Exception {
         JsonObject out = new JsonObject();
@@ -26,7 +26,7 @@ public class Minecraft12111ScreenInspectProvider implements ScreenInspectProvide
         out.addProperty("open", true);
         out.addProperty("type", screen.getClass().getName());
         out.addProperty("title", screen.getTitle().getString());
-
+        
         if (screen instanceof AbstractContainerScreen<?> cs) {
             AbstractContainerMenu menu = cs.getMenu();
             out.addProperty("menuClass", menu.getClass().getName());

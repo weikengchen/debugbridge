@@ -9,11 +9,11 @@ import java.time.format.DateTimeFormatter;
  */
 public final class LoggerOutputFiles {
     private static final DateTimeFormatter TIMESTAMP_FORMAT =
-        DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
-
+            DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
+    
     private LoggerOutputFiles() {
     }
-
+    
     public static String generate(String methodId) {
         String safeName = methodId.replaceAll("[^a-zA-Z0-9.]", "_");
         if (safeName.length() > 50) {

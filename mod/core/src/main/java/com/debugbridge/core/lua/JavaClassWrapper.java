@@ -1,6 +1,9 @@
 package com.debugbridge.core.lua;
 
-import org.luaj.vm2.*;
+import org.luaj.vm2.LuaError;
+import org.luaj.vm2.LuaUserdata;
+import org.luaj.vm2.LuaValue;
+import org.luaj.vm2.Varargs;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -22,28 +25,33 @@ public class JavaClassWrapper extends LuaUserdata {
     private final Class<?> javaClass;
     private final String mojangClassName;
     private final JavaBridge bridge;
-
+    
     public JavaClassWrapper(Class<?> javaClass, String mojangClassName, JavaBridge bridge) {
         super(javaClass);
         this.javaClass = javaClass;
         this.mojangClassName = mojangClassName;
         this.bridge = bridge;
     }
-
-    public Class<?> getJavaClass() { return javaClass; }
-    public String getMojangClassName() { return mojangClassName; }
-
+    
+    public Class<?> getJavaClass() {
+        return javaClass;
+    }
+    
+    public String getMojangClassName() {
+        return mojangClassName;
+    }
+    
     @Override
     public LuaValue get(LuaValue key) {
         String name = key.tojstring();
-
+        
         // 1. Try static field first (cheap check)
         String runtimeFieldName = bridge.getResolver().resolveField(mojangClassName, name);
         Field field = findStaticField(javaClass, runtimeFieldName);
         if (field == null && !runtimeFieldName.equals(name)) {
             field = findStaticField(javaClass, name);
         }
-
+        
         // 2. If field exists, check if a static method with the same name also exists.
         // If both exist, prefer the method to handle the common Java pattern:
         //   private static boolean isConnected;
@@ -62,17 +70,17 @@ public class JavaClassWrapper extends LuaUserdata {
                 field.setAccessible(true);
                 final Field f = field;
                 Object value = bridge.getDispatcher().executeOnGameThread(
-                    () -> f.get(null), 5000);
+                        () -> f.get(null), 5000);
                 return bridge.wrapJavaValue(value);
             } catch (Exception e) {
                 // Fall through to method wrapper
             }
         }
-
+        
         // 3. No field — return a MethodCallWrapper (most common case: method call)
         return new MethodCallWrapper(null, javaClass, mojangClassName, name, bridge);
     }
-
+    
     private boolean hasStaticMethod(Class<?> clazz, String name) {
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
             for (Method m : c.getDeclaredMethods()) {
@@ -83,7 +91,7 @@ public class JavaClassWrapper extends LuaUserdata {
         }
         return false;
     }
-
+    
     private Field findStaticField(Class<?> clazz, String name) {
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
             try {
@@ -95,12 +103,12 @@ public class JavaClassWrapper extends LuaUserdata {
         }
         return null;
     }
-
+    
     @Override
     public LuaValue tostring() {
         return LuaValue.valueOf("Class<" + mojangClassName + ">");
     }
-
+    
     // ==================== Call interception ====================
     //
     // A LuaUserdata with no __call metatable raises LuaJ's unhelpful
@@ -109,40 +117,52 @@ public class JavaClassWrapper extends LuaUserdata {
     // instead. This is the "I imported a class and then tried to call it as a
     // constructor" mistake — very natural coming from Python or JS, where
     // that's the expected syntax.
-
+    
     @Override
     public Varargs invoke(Varargs args) {
         throw new LuaError(buildCallError());
     }
-
+    
     @Override
-    public Varargs invoke() { return invoke(LuaValue.NONE); }
-
+    public Varargs invoke() {
+        return invoke(LuaValue.NONE);
+    }
+    
     @Override
-    public Varargs invoke(LuaValue[] a) { return invoke(LuaValue.varargsOf(a)); }
-
+    public Varargs invoke(LuaValue[] a) {
+        return invoke(LuaValue.varargsOf(a));
+    }
+    
     @Override
-    public LuaValue call() { invoke(LuaValue.NONE); return LuaValue.NIL; }
-
+    public LuaValue call() {
+        invoke(LuaValue.NONE);
+        return LuaValue.NIL;
+    }
+    
     @Override
-    public LuaValue call(LuaValue a) { invoke(a); return LuaValue.NIL; }
-
+    public LuaValue call(LuaValue a) {
+        invoke(a);
+        return LuaValue.NIL;
+    }
+    
     @Override
     public LuaValue call(LuaValue a, LuaValue b) {
-        invoke(LuaValue.varargsOf(new LuaValue[]{a, b})); return LuaValue.NIL;
+        invoke(LuaValue.varargsOf(new LuaValue[]{a, b}));
+        return LuaValue.NIL;
     }
-
+    
     @Override
     public LuaValue call(LuaValue a, LuaValue b, LuaValue c) {
-        invoke(LuaValue.varargsOf(new LuaValue[]{a, b, c})); return LuaValue.NIL;
+        invoke(LuaValue.varargsOf(new LuaValue[]{a, b, c}));
+        return LuaValue.NIL;
     }
-
+    
     private String buildCallError() {
         return "Attempted to call the class " + mojangClassName + " directly."
-            + "\n  Classes returned by java.import() are not callable."
-            + "\n  Fix options:"
-            + "\n    - Construct an instance:     java.new(cls, args...)"
-            + "\n    - Call a static method:      cls:methodName(args)  or  cls.methodName(args)"
-            + "\n    - Read a static field:       cls.fieldName";
+                + "\n  Classes returned by java.import() are not callable."
+                + "\n  Fix options:"
+                + "\n    - Construct an instance:     java.new(cls, args...)"
+                + "\n    - Call a static method:      cls:methodName(args)  or  cls.methodName(args)"
+                + "\n    - Read a static field:       cls.fieldName";
     }
 }
