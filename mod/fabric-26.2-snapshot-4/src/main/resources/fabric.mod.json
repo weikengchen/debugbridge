@@ -23,6 +23,9 @@
     },
     "depends": {
         "fabricloader": ">=0.19.2",
-        "minecraft": "26.2-snapshot-4"
+        "minecraft": [
+            "26.2-snapshot-4",
+            "26.2-alpha.4"
+        ]
     }
 }

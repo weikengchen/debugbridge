@@ -5,6 +5,8 @@ import com.debugbridge.hooks.BytecodeCache;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * A passive ClassFileTransformer that observes bytecode AFTER all other
@@ -24,6 +26,8 @@ public class BytecodeObserver implements ClassFileTransformer {
 
     private static volatile BytecodeObserver instance;
     private static volatile Instrumentation instrumentation;
+    private static final Set<String> explicitCacheRequests =
+        ConcurrentHashMap.newKeySet();
 
     // Only cache Minecraft-related classes to avoid memory bloat
     private static final String[] CACHE_PREFIXES = {
@@ -93,12 +97,14 @@ public class BytecodeObserver implements ClassFileTransformer {
             }
         }
 
-        // Only cache Minecraft classes to avoid memory bloat
-        boolean shouldCache = false;
-        for (String prefix : CACHE_PREFIXES) {
-            if (className.startsWith(prefix)) {
-                shouldCache = true;
-                break;
+        boolean shouldCache = explicitCacheRequests.remove(className);
+        if (!shouldCache) {
+            // Only cache Minecraft classes by default to avoid memory bloat.
+            for (String prefix : CACHE_PREFIXES) {
+                if (className.startsWith(prefix)) {
+                    shouldCache = true;
+                    break;
+                }
             }
         }
 
@@ -125,13 +131,17 @@ public class BytecodeObserver implements ClassFileTransformer {
             return; // Already cached
         }
 
-        // Force retransformation to capture current bytecode
-        // Our observer will cache it during the retransform cycle
+        // Force retransformation to capture current bytecode. Explicit requests
+        // are cached even for mod classes outside the default Minecraft prefixes.
+        explicitCacheRequests.add(internalName);
         try {
             if (instrumentation.isModifiableClass(clazz)) {
                 instrumentation.retransformClasses(clazz);
+            } else {
+                explicitCacheRequests.remove(internalName);
             }
         } catch (Exception e) {
+            explicitCacheRequests.remove(internalName);
             System.err.println("[DebugBridge] Failed to cache bytecode for "
                 + clazz.getName() + ": " + e.getMessage());
         }

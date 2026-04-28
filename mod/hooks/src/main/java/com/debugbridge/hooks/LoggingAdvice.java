@@ -22,7 +22,7 @@ public class LoggingAdvice {
      */
     @Advice.OnMethodEnter
     static long onEnter(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.This(optional = true) Object self,
             @Advice.AllArguments Object[] args) {
         return DebugBridgeLogger.onEntry(method, self, args);
@@ -34,7 +34,7 @@ public class LoggingAdvice {
      */
     @Advice.OnMethodExit(onThrowable = Throwable.class)
     static void onExit(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.Return(readOnly = true,
                            typing = Assigner.Typing.DYNAMIC) Object ret,
             @Advice.Thrown Throwable thrown,
