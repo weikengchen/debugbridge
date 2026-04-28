@@ -1,6 +1,7 @@
 package com.debugbridge.fabric12111;
 
 import com.debugbridge.core.BridgeConfig;
+import com.debugbridge.core.block.ClientBlockGlowManager;
 import com.debugbridge.core.lua.ThreadDispatcher;
 import com.debugbridge.core.mapping.MappingCache;
 import com.debugbridge.core.mapping.MappingDownloader;
@@ -16,6 +17,8 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.core.BlockPos;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -85,6 +88,8 @@ public class DebugBridgeMod implements ClientModInitializer {
             startupInfo = null;
         }
 
+        refreshBlockGlow(mc);
+
         if (!needsWarning) return;
 
         // Only show once, and only when no screen is open (game is ready)
@@ -100,6 +105,17 @@ public class DebugBridgeMod implements ClientModInitializer {
                 }
                 needsWarning = false;
             }));
+        }
+    }
+
+    private void refreshBlockGlow(Minecraft mc) {
+        LevelRenderer lr = mc.levelRenderer;
+        if (lr == null) return;
+        var glowing = ClientBlockGlowManager.snapshot();
+        if (glowing.isEmpty()) return;
+        for (var p : glowing) {
+            BlockPos pos = new BlockPos(p.x(), p.y(), p.z());
+            lr.gameTestBlockHighlightRenderer.highlightPos(pos, pos);
         }
     }
 
@@ -133,6 +149,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         ScreenshotProvider screenshotProvider = new Minecraft12111ScreenshotProvider();
         ItemTextureProvider textureProvider = new Minecraft12111ItemTextureProvider();
         Minecraft12111NearbyEntitiesProvider entitiesProvider = new Minecraft12111NearbyEntitiesProvider();
+        Minecraft12111NearbyBlocksProvider blocksProvider = new Minecraft12111NearbyBlocksProvider();
         Minecraft12111LookedAtEntityProvider lookedAtProvider = new Minecraft12111LookedAtEntityProvider();
 
         // Find available port and start server
@@ -146,6 +163,7 @@ public class DebugBridgeMod implements ClientModInitializer {
             // Register providers (use setters to avoid widening constructor)
             server.setTextureProvider(textureProvider);
             server.setEntitiesProvider(entitiesProvider);
+            server.setBlocksProvider(blocksProvider);
             server.setLookedAtEntityProvider(lookedAtProvider);
 
             if (actualPort != config.port) {

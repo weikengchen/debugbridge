@@ -9,6 +9,8 @@ import com.debugbridge.core.protocol.BridgeResponse;
 import com.debugbridge.core.refs.ObjectRefStore;
 import com.debugbridge.core.entity.ClientEntityGlowManager;
 import com.debugbridge.core.entity.LookedAtEntityProvider;
+import com.debugbridge.core.block.ClientBlockGlowManager;
+import com.debugbridge.core.block.NearbyBlocksProvider;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.snapshot.GameStateProvider;
@@ -66,6 +68,11 @@ public class BridgeServer extends WebSocketServer {
      * Nearby entities query provider. Set by the version-specific module.
      */
     private volatile NearbyEntitiesProvider entitiesProvider;
+
+    /**
+     * Nearby block-entities query provider. Set by the version-specific module.
+     */
+    private volatile NearbyBlocksProvider blocksProvider;
 
     /**
      * Raycast-based "what is the player aiming at" provider. Set by the
@@ -136,6 +143,15 @@ public class BridgeServer extends WebSocketServer {
     public void setEntitiesProvider(NearbyEntitiesProvider provider) {
         this.entitiesProvider = provider;
         LOG.info("[DebugBridge] Entities provider registered: " + provider.getClass().getSimpleName());
+    }
+
+    /**
+     * Register the nearby blocks provider. Called by the version-specific module
+     * during initialization.
+     */
+    public void setBlocksProvider(NearbyBlocksProvider provider) {
+        this.blocksProvider = provider;
+        LOG.info("[DebugBridge] Blocks provider registered: " + provider.getClass().getSimpleName());
     }
 
     /**
@@ -216,8 +232,12 @@ public class BridgeServer extends WebSocketServer {
                 case "getItemTextureById" -> handleGetItemTextureById(req);
                 case "nearbyEntities" -> handleNearbyEntities(req);
                 case "entityDetails" -> handleEntityDetails(req);
+                case "nearbyBlocks" -> handleNearbyBlocks(req);
+                case "blockDetails" -> handleBlockDetails(req);
                 case "lookedAtEntity" -> handleLookedAtEntity(req);
                 case "setEntityGlow" -> handleSetEntityGlow(req);
+                case "setBlockGlow" -> handleSetBlockGlow(req);
+                case "clearBlockGlow" -> handleClearBlockGlow(req);
                 case "injectLogger" -> handleInjectLogger(req);
                 case "cancelLogger" -> handleCancelLogger(req);
                 case "listLoggers" -> handleListLoggers(req);
@@ -533,6 +553,62 @@ public class BridgeServer extends WebSocketServer {
         }
     }
 
+    // ==================== Nearby Blocks Handlers ====================
+
+    private BridgeResponse handleNearbyBlocks(BridgeRequest req) {
+        if (blocksProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No blocks provider configured for this Minecraft version.");
+        }
+
+        double range = req.payload.has("range") ? req.payload.get("range").getAsDouble() : 16.0;
+        int limit = req.payload.has("limit") ? req.payload.get("limit").getAsInt() : 100;
+        try {
+            JsonArray blocks = blocksProvider.getNearbyBlocks(range, limit);
+            for (int i = 0; i < blocks.size(); i++) {
+                JsonObject obj = blocks.get(i).getAsJsonObject();
+                if (obj.has("type")) {
+                    String mapped = resolver.unresolveClass(obj.get("type").getAsString());
+                    if (mapped != null) obj.addProperty("type", mapped);
+                }
+            }
+            JsonObject result = new JsonObject();
+            result.add("blocks", blocks);
+            result.addProperty("count", blocks.size());
+            return BridgeResponse.success(req.id, result, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Nearby blocks query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
+    private BridgeResponse handleBlockDetails(BridgeRequest req) {
+        if (blocksProvider == null) {
+            return BridgeResponse.error(req.id,
+                "No blocks provider configured for this Minecraft version.");
+        }
+
+        int x = req.payload.get("x").getAsInt();
+        int y = req.payload.get("y").getAsInt();
+        int z = req.payload.get("z").getAsInt();
+        try {
+            JsonObject details = blocksProvider.getBlockDetails(x, y, z);
+            if (details == null) {
+                JsonObject gone = new JsonObject();
+                gone.addProperty("gone", true);
+                return BridgeResponse.success(req.id, gone, null);
+            }
+            if (details.has("type")) {
+                String mapped = resolver.unresolveClass(details.get("type").getAsString());
+                if (mapped != null) details.addProperty("type", mapped);
+            }
+            return BridgeResponse.success(req.id, details, null);
+        } catch (Exception e) {
+            return BridgeResponse.error(req.id,
+                "Block details query failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+    }
+
     private BridgeResponse handleLookedAtEntity(BridgeRequest req) {
         if (lookedAtEntityProvider == null) {
             return BridgeResponse.error(req.id,
@@ -562,6 +638,27 @@ public class BridgeServer extends WebSocketServer {
         JsonObject result = new JsonObject();
         result.addProperty("entityId", entityId);
         result.addProperty("glow", glow);
+        return BridgeResponse.success(req.id, result, null);
+    }
+
+    private BridgeResponse handleSetBlockGlow(BridgeRequest req) {
+        int x = req.payload.get("x").getAsInt();
+        int y = req.payload.get("y").getAsInt();
+        int z = req.payload.get("z").getAsInt();
+        boolean glow = req.payload.get("glow").getAsBoolean();
+        ClientBlockGlowManager.setGlow(x, y, z, glow);
+        JsonObject result = new JsonObject();
+        result.addProperty("x", x);
+        result.addProperty("y", y);
+        result.addProperty("z", z);
+        result.addProperty("glow", glow);
+        return BridgeResponse.success(req.id, result, null);
+    }
+
+    private BridgeResponse handleClearBlockGlow(BridgeRequest req) {
+        ClientBlockGlowManager.clear();
+        JsonObject result = new JsonObject();
+        result.addProperty("cleared", true);
         return BridgeResponse.success(req.id, result, null);
     }
 

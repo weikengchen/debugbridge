@@ -4,13 +4,15 @@ import BrowserPanel from './BrowserPanel.vue'
 import LuaInspector from './LuaInspector.vue'
 import InventoryPanel from './InventoryPanel.vue'
 import EntitiesPanel from './EntitiesPanel.vue'
+import BlocksPanel from './BlocksPanel.vue'
 
-type Mode = 'browser' | 'lua' | 'inventory' | 'entities'
+type Mode = 'browser' | 'lua' | 'inventory' | 'entities' | 'blocks'
 const mode = ref<Mode>('browser')
 
 const tabs: { id: Mode; label: string }[] = [
   { id: 'inventory', label: '🎒 Inventory' },
   { id: 'entities', label: '👁 Entities' },
+  { id: 'blocks', label: '🧱 Blocks' },
   { id: 'browser', label: '🌳 Object Browser' },
   { id: 'lua', label: '📝 Lua Inspector' },
 ]
@@ -37,6 +39,7 @@ const tabs: { id: Mode; label: string }[] = [
     <div class="flex-1 overflow-hidden">
       <InventoryPanel v-if="mode === 'inventory'" />
       <EntitiesPanel v-else-if="mode === 'entities'" />
+      <BlocksPanel v-else-if="mode === 'blocks'" />
       <BrowserPanel v-else-if="mode === 'browser'" />
       <LuaInspector v-else />
     </div>

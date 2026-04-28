@@ -7,6 +7,7 @@ import com.debugbridge.core.mapping.MappingDownloader;
 import com.debugbridge.core.mapping.ProGuardParser;
 import com.debugbridge.core.mapping.ParsedMappings;
 import com.debugbridge.core.mapping.MappingResolver;
+import com.debugbridge.core.block.NearbyBlocksProvider;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.server.BridgeServer;
@@ -133,6 +134,7 @@ public class DebugBridgeMod implements ClientModInitializer {
         GameStateProvider stateProvider = new Minecraft119StateProvider();
         ScreenshotProvider screenshotProvider = new Minecraft119ScreenshotProvider();
         NearbyEntitiesProvider entitiesProvider = new Minecraft119NearbyEntitiesProvider();
+        NearbyBlocksProvider blocksProvider = new Minecraft119NearbyBlocksProvider();
         ItemTextureProvider textureProvider = new Minecraft119ItemTextureProvider();
         Minecraft119LookedAtEntityProvider lookedAtProvider = new Minecraft119LookedAtEntityProvider();
 
@@ -145,6 +147,7 @@ public class DebugBridgeMod implements ClientModInitializer {
             startupError = msg;
         } else {
             server.setEntitiesProvider(entitiesProvider);
+            server.setBlocksProvider(blocksProvider);
             server.setTextureProvider(textureProvider);
             server.setLookedAtEntityProvider(lookedAtProvider);
 
