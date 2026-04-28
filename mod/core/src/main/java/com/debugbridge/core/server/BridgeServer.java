@@ -432,7 +432,33 @@ public class BridgeServer extends WebSocketServer {
         String mapped = resolver.unresolveClass(obj.get(field).getAsString());
         if (mapped != null) obj.addProperty(field, mapped);
     }
-    
+
+    /**
+     * Render the texture for each unique {@code itemId} in {@code uniqueIds}
+     * and return a JSON map {itemId: {base64Png, width, height, spriteName}}.
+     * Items that fail to render are silently omitted. Empty input returns an
+     * empty object. Callers attach this as a top-level {@code icons} field
+     * on a response so the agent can see all item visuals in one shot.
+     */
+    private JsonObject renderIconsMap(java.util.Set<String> uniqueIds) {
+        JsonObject icons = new JsonObject();
+        if (textureProvider == null || uniqueIds.isEmpty()) return icons;
+        for (String itemId : uniqueIds) {
+            try {
+                ItemTextureProvider.TextureResult tex = textureProvider.getItemTextureById(itemId);
+                JsonObject entry = new JsonObject();
+                entry.addProperty("base64Png", tex.base64Png());
+                entry.addProperty("width", tex.width());
+                entry.addProperty("height", tex.height());
+                entry.addProperty("spriteName", tex.spriteName());
+                icons.add(itemId, entry);
+            } catch (Exception ignore) {
+                // Skip items that fail to render (e.g., unknown id).
+            }
+        }
+        return icons;
+    }
+
     private BridgeResponse handleRunCommand(BridgeRequest req) {
         String command = req.payload.get("command").getAsString();
         // This needs to be implemented via the version-specific module
@@ -559,6 +585,8 @@ public class BridgeServer extends WebSocketServer {
         
         double range = req.payload.has("range") ? req.payload.get("range").getAsDouble() : 64.0;
         int limit = req.payload.has("limit") ? req.payload.get("limit").getAsInt() : 100;
+        boolean includeIcons = req.payload.has("includeIcons")
+            && req.payload.get("includeIcons").getAsBoolean();
         try {
             JsonArray entities = entitiesProvider.getNearbyEntities(range, limit);
             // Map intermediary class names to Mojang names
@@ -572,6 +600,18 @@ public class BridgeServer extends WebSocketServer {
             JsonObject result = new JsonObject();
             result.add("entities", entities);
             result.addProperty("count", entities.size());
+
+            if (includeIcons) {
+                java.util.Set<String> uniqueIds = new java.util.LinkedHashSet<>();
+                for (int i = 0; i < entities.size(); i++) {
+                    JsonObject obj = entities.get(i).getAsJsonObject();
+                    if (obj.has("primaryEquipment")) {
+                        JsonObject eq = obj.getAsJsonObject("primaryEquipment");
+                        if (eq.has("itemId")) uniqueIds.add(eq.get("itemId").getAsString());
+                    }
+                }
+                result.add("icons", renderIconsMap(uniqueIds));
+            }
             return BridgeResponse.success(req.id, result, null);
         } catch (Exception e) {
             return BridgeResponse.error(req.id,
@@ -703,9 +743,11 @@ public class BridgeServer extends WebSocketServer {
                     "No chat history provider configured for this Minecraft version.");
         }
         int limit = req.payload != null && req.payload.has("limit")
-                ? req.payload.get("limit").getAsInt() : 50;
+            ? req.payload.get("limit").getAsInt() : 50;
+        boolean includeJson = req.payload != null && req.payload.has("includeJson")
+            && req.payload.get("includeJson").getAsBoolean();
         try {
-            JsonArray messages = chatHistoryProvider.getRecentMessages(limit, resolver);
+            JsonArray messages = chatHistoryProvider.getRecentMessages(limit, resolver, includeJson);
             JsonObject result = new JsonObject();
             result.add("messages", messages);
             result.addProperty("count", messages.size());
@@ -721,11 +763,28 @@ public class BridgeServer extends WebSocketServer {
             return BridgeResponse.error(req.id,
                     "No screen inspect provider configured for this Minecraft version.");
         }
+        boolean includeIcons = req.payload != null && req.payload.has("includeIcons")
+            && req.payload.get("includeIcons").getAsBoolean();
         try {
             JsonObject result = screenInspectProvider.inspectCurrentScreen();
             // Map any class-name fields through the resolver so callers see Mojang names.
             unresolveClassField(result, "type");
             unresolveClassField(result, "menuClass");
+
+            if (includeIcons && result.has("slots")) {
+                java.util.Set<String> uniqueIds = new java.util.LinkedHashSet<>();
+                JsonArray slots = result.getAsJsonArray("slots");
+                for (int i = 0; i < slots.size(); i++) {
+                    JsonObject slot = slots.get(i).getAsJsonObject();
+                    if (slot.has("item")) {
+                        JsonObject item = slot.getAsJsonObject("item");
+                        if (item.has("itemId")) {
+                            uniqueIds.add(item.get("itemId").getAsString());
+                        }
+                    }
+                }
+                result.add("icons", renderIconsMap(uniqueIds));
+            }
             return BridgeResponse.success(req.id, result, null);
         } catch (Exception e) {
             return BridgeResponse.error(req.id,

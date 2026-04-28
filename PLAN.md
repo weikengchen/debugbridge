@@ -82,6 +82,32 @@ Two things to keep in mind while reading the rest:
 - Nobody uses `mc_run_command`. Agents prefer Lua because it returns values they can branch on.
 - Long `mc_execute` chains in luabridge's own session (33-call chain in transcript `86390bec-…`) were exploration of the item-render pipeline. That kind of exploration is exactly what `mc_execute` *should* support — just not for things a native endpoint already covers (#4–6).
 
+## Follow-ups (post-tier)
+
+### A. Texture wrappers return MCP image content, not stringified JSON
+- **Done 2026-04-28** ([mcdev-mcp e1c580d](https://github.com/weikengchen/mcdev-mcp/commit/e1c580d)). `mc_get_item_texture`, `mc_get_entity_item_texture`, `mc_get_item_texture_by_id` now return `[{type:"image", data, mimeType:"image/png"}, {type:"text", text:"<W>x<H> sprite=<name>"}]` — the model can see the rendered item directly instead of getting a wall of base64 string. Verified end-to-end on both ports (1.19=16x16, 1.21.11=32x32, both with valid PNG signatures).
+- [x] Done
+
+### B. `mc_chat_history` `includeJson` for styled-component access
+- **Done 2026-04-28** ([debugbridge b303d7b](https://github.com/weikengchen/debugbridge/commit/b303d7b), [mcdev-mcp f5faef0](https://github.com/weikengchen/mcdev-mcp/commit/f5faef0)). New `includeJson` boolean parameter (default false) on `mc_chat_history`. When true, each message also returns a `json` field with the full Component serialized — preserves colors, styles, click events, hover events. 1.21.11 uses `ComponentSerialization.CODEC.encodeStart(JsonOps, c)`; 1.19 uses `Component.Serializer.toJson(c)` re-parsed for consistent wire shape. Default off keeps the common-case response compact.
+- [x] Done
+
+### C. `mc_screen_inspect` `includeIcons` for one-shot container visibility
+- **Done 2026-04-28** ([debugbridge 4047006](https://github.com/weikengchen/debugbridge/commit/4047006), [mcdev-mcp bfda47d](https://github.com/weikengchen/mcdev-mcp/commit/bfda47d)). When `includeIcons=true`, the bridge collects unique `itemId`s across slots, renders each via `ItemTextureProvider.getItemTextureById`, and attaches a top-level `icons` map keyed by itemId — agent sees a container's contents in one shot instead of N follow-up `mc_get_item_texture_by_id` calls. Dedup means a 90-slot chest of stone+dirt only ships two icons. Default off keeps the basic response small.
+- [x] Done
+
+### D. `mc_nearby_entities` `includeIcons` for entity-held items
+- **Done 2026-04-28** (same commits as C). Same shape: when true, walks `primaryEquipment.itemId` across the entity list, renders unique items, attaches the `icons` map. Lets the agent answer "what's that armor stand wearing?" without per-entity texture calls.
+- [x] Done
+
+### E. Richer `mc_search` per-result context
+- **Done 2026-04-28** ([mcdev-mcp bfda47d](https://github.com/weikengchen/mcdev-mcp/commit/bfda47d)). Each search hit now includes enough context that `mc_get_class` / `mc_get_method` follow-ups are unnecessary in trivial cases:
+  - `[class] FQN extends Super implements I1, I2 (Nf, Mm)` — kind (class/interface/record/enum), extends, implements, field/method counts.
+  - `[method] FQN#name: public static int foo(int bar) (line N)` — full signature with modifiers.
+  - `[field] FQN#name: private static final int MAX_HEALTH` — modifiers + declaration.
+- Verified locally: 19 `Inventory` class hits, 50 `getX` method hits, 7 `MAX_HEALTH` field hits — each one richer than before.
+- [x] Done
+
 ## How to use this doc
 
 1. Pick an item, work it, check the box.
