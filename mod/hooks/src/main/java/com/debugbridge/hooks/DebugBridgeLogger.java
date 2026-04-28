@@ -208,7 +208,13 @@ public class DebugBridgeLogger {
         // Inject advice if this method hasn't been instrumented yet
         if (injectedMethods.add(methodId)) {
             if (injector != null) {
-                injector.accept(methodId);
+                try {
+                    injector.accept(methodId);
+                } catch (RuntimeException | Error e) {
+                    remove(id, methodId);
+                    injectedMethods.remove(methodId);
+                    throw e;
+                }
             } else {
                 System.err.println("[DebugBridge] No injector registered, "
                     + "cannot instrument " + methodId);

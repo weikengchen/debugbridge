@@ -1,6 +1,7 @@
 package com.debugbridge.fabric262;
 
 import com.debugbridge.core.BridgeConfig;
+import com.debugbridge.core.logging.ReflectiveLoggerService;
 import com.debugbridge.core.lua.ThreadDispatcher;
 import com.debugbridge.core.mapping.PassthroughResolver;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
@@ -174,6 +175,7 @@ public class DebugBridgeMod implements ClientModInitializer {
             server = new BridgeServer(port, resolver, dispatcher, stateProvider, screenshotProvider);
             server.setReuseAddr(true);
             server.setGameDir(FabricLoader.getInstance().getGameDir());
+            server.setLoggerService(new ReflectiveLoggerService());
             server.start();
             return true;
         } catch (Exception e) {
