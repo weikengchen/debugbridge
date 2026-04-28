@@ -37,7 +37,7 @@ public final class JpegEncoder {
             throw new IllegalArgumentException(
                     "pixel buffer length " + argbPixels.length + " != " + width + "*" + height);
         }
-        float clamped = Math.max(0.05f, Math.min(1.0f, quality));
+        float clamped = Math.clamp(quality, 0.05f, 1.0f);
         
         // TYPE_INT_RGB drops the alpha byte when we setRGB with ARGB ints,
         // which is exactly what we want for JPEG (no alpha channel).

@@ -41,16 +41,12 @@ public class MethodCallWrapper extends org.luaj.vm2.lib.VarArgFunction {
         // BFS over interfaces from every class in the chain.
         Deque<Class<?>> queue = new ArrayDeque<>();
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
-            for (Class<?> iface : c.getInterfaces()) {
-                queue.add(iface);
-            }
+            Collections.addAll(queue, c.getInterfaces());
         }
         while (!queue.isEmpty()) {
             Class<?> iface = queue.poll();
             if (!out.add(iface)) continue;
-            for (Class<?> superIface : iface.getInterfaces()) {
-                queue.add(superIface);
-            }
+            Collections.addAll(queue, iface.getInterfaces());
         }
     }
     

@@ -76,9 +76,7 @@ public class DeveloperWarningScreen extends Screen {
         // "Cancel" button
         this.addRenderableWidget(Button.builder(
                 Component.literal("Cancel - Disable Mod"),
-                button -> {
-                    onComplete.accept(false);
-                }
+                button -> onComplete.accept(false)
         ).bounds(startX + buttonWidth + spacing, buttonY, buttonWidth, buttonHeight).build());
     }
     

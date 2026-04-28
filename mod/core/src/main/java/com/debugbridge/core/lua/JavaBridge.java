@@ -107,16 +107,40 @@ public class JavaBridge {
      * Wrap a Java value as an appropriate Lua value.
      */
     public LuaValue wrapJavaValue(Object value) {
-        if (value == null) return LuaValue.NIL;
-        if (value instanceof Boolean b) return LuaValue.valueOf(b);
-        if (value instanceof Byte b) return LuaValue.valueOf(b);
-        if (value instanceof Short s) return LuaValue.valueOf(s);
-        if (value instanceof Integer i) return LuaValue.valueOf(i);
-        if (value instanceof Long l) return LuaValue.valueOf(l.doubleValue());
-        if (value instanceof Float f) return LuaValue.valueOf(f);
-        if (value instanceof Double d) return LuaValue.valueOf(d);
-        if (value instanceof String s) return LuaValue.valueOf(s);
-        if (value instanceof Character c) return LuaValue.valueOf(String.valueOf(c));
+        switch (value) {
+            case null -> {
+                return LuaValue.NIL;
+            }
+            case Boolean b -> {
+                return LuaValue.valueOf(b);
+            }
+            case Byte b -> {
+                return LuaValue.valueOf(b);
+            }
+            case Short s -> {
+                return LuaValue.valueOf(s);
+            }
+            case Integer i -> {
+                return LuaValue.valueOf(i);
+            }
+            case Long l -> {
+                return LuaValue.valueOf(l.doubleValue());
+            }
+            case Float f -> {
+                return LuaValue.valueOf(f);
+            }
+            case Double d -> {
+                return LuaValue.valueOf(d);
+            }
+            case String s -> {
+                return LuaValue.valueOf(s);
+            }
+            case Character c -> {
+                return LuaValue.valueOf(String.valueOf(c));
+            }
+            default -> {
+            }
+        }
         
         // Wrap any other object
         String mojangType = resolver.unresolveClass(value.getClass().getName());
@@ -213,13 +237,13 @@ public class JavaBridge {
         Set<Class<?>> ifaces = new LinkedHashSet<>();
         Deque<Class<?>> queue = new ArrayDeque<>();
         for (Class<?> c = clazz; c != null; c = c.getSuperclass()) {
-            for (Class<?> iface : c.getInterfaces()) queue.add(iface);
+            Collections.addAll(queue, c.getInterfaces());
         }
         while (!queue.isEmpty()) {
             Class<?> iface = queue.poll();
             if (!ifaces.add(iface)) continue;
             populateReverseFromClass(iface, table);
-            for (Class<?> superIface : iface.getInterfaces()) queue.add(superIface);
+            Collections.addAll(queue, iface.getInterfaces());
         }
         
         reverseMethodCache.put(clazz, table);

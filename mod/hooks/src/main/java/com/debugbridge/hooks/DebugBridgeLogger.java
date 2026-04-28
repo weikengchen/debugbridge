@@ -270,7 +270,7 @@ public class DebugBridgeLogger {
         recentErrors.add(err);
         // Cap error list size
         while (recentErrors.size() > MAX_ERRORS) {
-            recentErrors.remove(0);
+            recentErrors.removeFirst();
         }
         
         System.err.println("[DebugBridge] Logger #" + loggerId

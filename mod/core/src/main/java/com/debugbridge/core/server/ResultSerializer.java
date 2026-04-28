@@ -112,7 +112,7 @@ public class ResultSerializer {
         // Shallow field summary
         try {
             JsonObject fields = summarizeFields(javaObj, mojangType);
-            if (fields.size() > 0) {
+            if (!fields.isEmpty()) {
                 obj.add("fields", fields);
             }
         } catch (Exception e) {
@@ -136,16 +136,12 @@ public class ResultSerializer {
                 // Use the runtime name since we don't have reverse field lookup here
                 String name = f.getName();
                 
-                if (val == null) {
-                    fields.add(name, JsonNull.INSTANCE);
-                } else if (val instanceof Boolean b) {
-                    fields.addProperty(name, b);
-                } else if (val instanceof Number n) {
-                    fields.addProperty(name, n);
-                } else if (val instanceof String s) {
-                    fields.addProperty(name, s);
-                } else {
-                    fields.addProperty(name, val.getClass().getSimpleName() + "@" +
+                switch (val) {
+                    case null -> fields.add(name, JsonNull.INSTANCE);
+                    case Boolean b -> fields.addProperty(name, b);
+                    case Number n -> fields.addProperty(name, n);
+                    case String s -> fields.addProperty(name, s);
+                    default -> fields.addProperty(name, val.getClass().getSimpleName() + "@" +
                             Integer.toHexString(System.identityHashCode(val)));
                 }
                 count++;

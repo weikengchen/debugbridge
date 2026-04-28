@@ -98,14 +98,16 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
                     
                     // Primary equipment / framed / displayed item for thumbnail rendering
                     JsonObject primary = null;
-                    if (entity instanceof LivingEntity living) {
-                        primary = pickPrimaryEquipment(living);
-                    } else if (entity instanceof ItemFrame frame) {
-                        primary = buildPrimary("FRAME", frame.getItem());
-                    } else if (entity instanceof Display.ItemDisplay itemDisplay) {
-                        var renderState = itemDisplay.itemRenderState();
-                        if (renderState != null && renderState.itemStack() != null) {
-                            primary = buildPrimary("DISPLAY", renderState.itemStack());
+                    switch (entity) {
+                        case LivingEntity living -> primary = pickPrimaryEquipment(living);
+                        case ItemFrame frame -> primary = buildPrimary("FRAME", frame.getItem());
+                        case Display.ItemDisplay itemDisplay -> {
+                            var renderState = itemDisplay.itemRenderState();
+                            if (renderState != null) {
+                                primary = buildPrimary("DISPLAY", renderState.itemStack());
+                            }
+                        }
+                        default -> {
                         }
                     }
                     if (primary != null) {
@@ -202,7 +204,7 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
                     addEquipment(equipment, "CHEST", living, EquipmentSlot.CHEST);
                     addEquipment(equipment, "LEGS", living, EquipmentSlot.LEGS);
                     addEquipment(equipment, "FEET", living, EquipmentSlot.FEET);
-                    if (equipment.size() > 0) {
+                    if (!equipment.isEmpty()) {
                         obj.add("equipment", equipment);
                     }
                 }

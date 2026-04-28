@@ -60,23 +60,25 @@ public class LuaRuntime {
      */
     private void installMinecraftGlobals() {
         String bootstrap =
-                "do\n" +
-                        "  local ok, Minecraft = pcall(java.import, 'net.minecraft.client.Minecraft')\n" +
-                        "  if not ok then return end\n" +
-                        "  local gmt = getmetatable(_G) or {}\n" +
-                        "  local prev = gmt.__index\n" +
-                        "  gmt.__index = function(t, k)\n" +
-                        "    if k == 'mc' then return Minecraft:getInstance() end\n" +
-                        "    if k == 'player' then return Minecraft:getInstance().player end\n" +
-                        "    if k == 'level' then return Minecraft:getInstance().level end\n" +
-                        "    if prev then\n" +
-                        "      if type(prev) == 'function' then return prev(t, k) end\n" +
-                        "      return prev[k]\n" +
-                        "    end\n" +
-                        "    return nil\n" +
-                        "  end\n" +
-                        "  setmetatable(_G, gmt)\n" +
-                        "end\n";
+                """
+                        do
+                          local ok, Minecraft = pcall(java.import, 'net.minecraft.client.Minecraft')
+                          if not ok then return end
+                          local gmt = getmetatable(_G) or {}
+                          local prev = gmt.__index
+                          gmt.__index = function(t, k)
+                            if k == 'mc' then return Minecraft:getInstance() end
+                            if k == 'player' then return Minecraft:getInstance().player end
+                            if k == 'level' then return Minecraft:getInstance().level end
+                            if prev then
+                              if type(prev) == 'function' then return prev(t, k) end
+                              return prev[k]
+                            end
+                            return nil
+                          end
+                          setmetatable(_G, gmt)
+                        end
+                        """;
         try {
             globals.load(bootstrap, "=mc-globals").invoke();
         } catch (Exception e) {

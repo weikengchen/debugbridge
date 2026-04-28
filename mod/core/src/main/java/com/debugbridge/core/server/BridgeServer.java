@@ -438,9 +438,10 @@ public class BridgeServer extends WebSocketServer {
         // This needs to be implemented via the version-specific module
         // For now, execute via Lua
         String luaCode = String.format(
-                "local mc = java.import('net.minecraft.client.Minecraft'):getInstance()\n" +
-                        "mc.player:connection():sendCommand('%s')\n" +
-                        "return 'Command sent: %s'",
+                """
+                        local mc = java.import('net.minecraft.client.Minecraft'):getInstance()
+                        mc.player:connection():sendCommand('%s')
+                        return 'Command sent: %s'""",
                 command.replace("'", "\\'"),
                 command.replace("'", "\\'")
         );

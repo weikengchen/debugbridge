@@ -168,24 +168,25 @@ public class Minecraft12111ItemTextureProvider implements ItemTextureProvider {
             if (target == null) throw new Exception("Entity " + entityId + " not found");
             
             ItemStack stack;
-            if ("FRAME".equals(slotName) && target instanceof ItemFrame frame) {
-                stack = frame.getItem();
-            } else if ("DISPLAY".equals(slotName) && target instanceof Display.ItemDisplay itemDisplay) {
-                var renderState = itemDisplay.itemRenderState();
-                if (renderState == null || renderState.itemStack() == null) {
-                    throw new Exception("ItemDisplay render state not ready");
+            switch (target) {
+                case ItemFrame frame when "FRAME".equals(slotName) -> stack = frame.getItem();
+                case Display.ItemDisplay itemDisplay when "DISPLAY".equals(slotName) -> {
+                    var renderState = itemDisplay.itemRenderState();
+                    if (renderState == null) {
+                        throw new Exception("ItemDisplay render state not ready");
+                    }
+                    stack = renderState.itemStack();
                 }
-                stack = renderState.itemStack();
-            } else if (target instanceof LivingEntity living) {
-                EquipmentSlot slot;
-                try {
-                    slot = EquipmentSlot.valueOf(slotName);
-                } catch (IllegalArgumentException e) {
-                    throw new Exception("Unknown slot " + slotName);
+                case LivingEntity living -> {
+                    EquipmentSlot slot;
+                    try {
+                        slot = EquipmentSlot.valueOf(slotName);
+                    } catch (IllegalArgumentException e) {
+                        throw new Exception("Unknown slot " + slotName);
+                    }
+                    stack = living.getItemBySlot(slot);
                 }
-                stack = living.getItemBySlot(slot);
-            } else {
-                throw new Exception("Entity " + entityId + " has no equipment");
+                default -> throw new Exception("Entity " + entityId + " has no equipment");
             }
             
             if (stack.isEmpty())

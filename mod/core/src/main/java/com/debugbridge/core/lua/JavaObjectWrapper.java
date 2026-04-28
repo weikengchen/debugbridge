@@ -200,12 +200,9 @@ public class JavaObjectWrapper extends LuaUserdata {
             // Detect whether this is the `obj:field()` colon-call shape — the
             // first arg in that case is the parent JavaObjectWrapper that
             // owns the field.
-            boolean looksLikeColonCall = false;
-            if (args != null && args.narg() >= 1
+            boolean looksLikeColonCall = args != null && args.narg() >= 1
                     && args.arg(1) instanceof JavaObjectWrapper parent
-                    && parent.getDeclaredType() == o.parentType) {
-                looksLikeColonCall = true;
-            }
+                    && parent.getDeclaredType() == o.parentType;
             
             sb.append("\n  ").append(o.parentTypeName).append(".")
                     .append(o.accessName)

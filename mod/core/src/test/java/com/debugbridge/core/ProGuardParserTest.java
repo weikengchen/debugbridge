@@ -79,7 +79,7 @@ class ProGuardParserTest {
         ParsedMappings m = ProGuardParser.parse(SAMPLE_MAPPINGS);
         var overloads = m.findMethodOverloads("net.minecraft.client.Minecraft", "setScreen");
         assertEquals(1, overloads.size());
-        assertEquals("a", overloads.get(0));
+        assertEquals("a", overloads.getFirst());
     }
     
     @Test

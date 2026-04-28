@@ -216,7 +216,7 @@ public class FabricMojangResolver implements MappingResolver {
                 }
             }
             if (matches.size() == 1) {
-                return matches.get(0).getName();
+                return matches.getFirst().getName();
             }
         } catch (Exception e) {
             // fall through
@@ -239,7 +239,7 @@ public class FabricMojangResolver implements MappingResolver {
                 }
             }
             if (matches.size() == 1) {
-                return matches.get(0).getName();
+                return matches.getFirst().getName();
             }
         } catch (Exception e) {
             // fall through
@@ -297,19 +297,10 @@ public class FabricMojangResolver implements MappingResolver {
         if (mojangType.endsWith("[]")) {
             return resolveTypeName(mojangType.substring(0, mojangType.length() - 2)) + "[]";
         }
-        switch (mojangType) {
-            case "void":
-            case "boolean":
-            case "byte":
-            case "char":
-            case "short":
-            case "int":
-            case "long":
-            case "float":
-            case "double":
-                return mojangType;
-        }
-        return resolveClass(mojangType);
+        return switch (mojangType) {
+            case "void", "boolean", "byte", "char", "short", "int", "long", "float", "double" -> mojangType;
+            default -> resolveClass(mojangType);
+        };
     }
     
     private String obfuscateTypeName(String mojangType) {

@@ -181,7 +181,7 @@ public class DebugBridgeMod implements ClientModInitializer {
     private int startServerOnAvailablePort(int preferredPort, MappingResolver resolver,
                                            ThreadDispatcher dispatcher, GameStateProvider stateProvider,
                                            ScreenshotProvider screenshotProvider) {
-        int startPort = Math.max(PORT_RANGE_START, Math.min(PORT_RANGE_END, preferredPort));
+        int startPort = Math.clamp(preferredPort, PORT_RANGE_START, PORT_RANGE_END);
         
         // First pass: preferred port -> end of range
         for (int port = startPort; port <= PORT_RANGE_END; port++) {

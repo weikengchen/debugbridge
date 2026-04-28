@@ -51,11 +51,11 @@ public class Minecraft12111NearbyBlocksProvider implements NearbyBlocksProvider 
                 var msg = front.getMessage(i, false);
                 String s = msg == null ? "" : msg.getString();
                 if (!s.isEmpty()) {
-                    if (sb.length() > 0) sb.append(" / ");
+                    if (!sb.isEmpty()) sb.append(" / ");
                     sb.append(s);
                 }
             }
-            return sb.length() > 0 ? sb.toString() : null;
+            return !sb.isEmpty() ? sb.toString() : null;
         }
         if (be instanceof Container container) {
             int filled = 0;
