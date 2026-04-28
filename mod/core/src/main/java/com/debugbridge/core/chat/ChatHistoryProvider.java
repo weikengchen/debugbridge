@@ -10,7 +10,7 @@ import com.google.gson.JsonArray;
  * per field on each message).
  */
 public interface ChatHistoryProvider {
-
+    
     /**
      * Get the most recent chat messages, newest first.
      *

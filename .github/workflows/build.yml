@@ -7,38 +7,70 @@ on:
     branches: [main]
 
 jobs:
-  build-mod:
+  build-legacy-mods:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up JDK 21
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           java-version: '21'
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+        uses: gradle/actions/setup-gradle@v6
 
-      - name: Build Fabric 1.21.11 mod
+      - name: Build Fabric 1.19 and 1.21.11 mods
         working-directory: mod
-        run: ./gradlew :fabric-1.21.11:build --no-daemon
+        run: ./gradlew :fabric-1.19:build :fabric-1.21.11:build --no-daemon
+
+      - name: Upload 1.19 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: debugbridge-1.19
+          path: mod/fabric-1.19/build/libs/*.jar
+          if-no-files-found: error
 
       - name: Upload 1.21.11 artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debugbridge-1.21.11
           path: mod/fabric-1.21.11/build/libs/*.jar
           if-no-files-found: error
 
+  build-26-2-snapshot-4:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 26
+        uses: actions/setup-java@v5
+        with:
+          java-version: '26'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Build Fabric 26.2 snapshot mod
+        working-directory: mod
+        run: ./gradlew :fabric-26.2-snapshot-4:build --no-daemon
+
+      - name: Upload 26.2 artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: debugbridge-26.2-snapshot-4
+          path: mod/fabric-26.2-snapshot-4/build/libs/*.jar
+          if-no-files-found: error
+
   build-web-ui:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: 'npm'
@@ -53,7 +85,7 @@ jobs:
         run: npm run build
 
       - name: Upload web UI
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: web-ui
           path: web-ui/dist/

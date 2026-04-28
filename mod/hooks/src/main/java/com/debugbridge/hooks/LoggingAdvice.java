@@ -5,7 +5,7 @@ import net.bytebuddy.implementation.bytecode.assign.Assigner;
 
 /**
  * A Byte Buddy @Advice class whose bytecode is inlined into target methods.
- *
+ * <p>
  * IMPORTANT: This class is NEVER called at runtime. Byte Buddy reads its
  * bytecode at transformation time and inlines it into target methods.
  * Therefore:
@@ -14,7 +14,7 @@ import net.bytebuddy.implementation.bytecode.assign.Assigner;
  * 3. DebugBridgeLogger must be on the bootstrap classloader
  */
 public class LoggingAdvice {
-
+    
     /**
      * Inlined at method entry. Captures method signature, 'this', and arguments.
      *
@@ -22,21 +22,21 @@ public class LoggingAdvice {
      */
     @Advice.OnMethodEnter
     static long onEnter(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.This(optional = true) Object self,
             @Advice.AllArguments Object[] args) {
         return DebugBridgeLogger.onEntry(method, self, args);
     }
-
+    
     /**
      * Inlined at method exit (both normal return and exception).
      * Only logs if startTime != 0 (i.e., onEntry logged something).
      */
     @Advice.OnMethodExit(onThrowable = Throwable.class)
     static void onExit(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.Return(readOnly = true,
-                           typing = Assigner.Typing.DYNAMIC) Object ret,
+                    typing = Assigner.Typing.DYNAMIC) Object ret,
             @Advice.Thrown Throwable thrown,
             @Advice.Enter long startTime) {
         if (startTime != 0L) {

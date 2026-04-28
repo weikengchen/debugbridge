@@ -35,7 +35,7 @@ The primary use case is integration with [Claude Code](https://claude.ai/claude-
 +---------------------v---------------------------------------+
 |  DebugBridge Mod (inside Minecraft JVM) [THIS REPOSITORY]    |
 |  - LuaJ interpreter with Java reflection bridge             |
-|  - Mojang mapping resolver (auto-downloaded)                |
+|  - Version-aware mapping resolver (mapped builds only)      |
 |  - Thread dispatcher for game-thread safety                 |
 +-------------------------------------------------------------+
 ```
@@ -64,11 +64,13 @@ end
 
 ### Mojang Mapping Support
 
-The mod automatically downloads official Mojang mappings at startup and uses them to translate human-readable names (like `net.minecraft.client.Minecraft`) to the obfuscated names used at runtime. This means:
+Mapped builds download or resolve the mapping metadata they need and use it to translate human-readable names (like `net.minecraft.client.Minecraft`) to the names used at runtime. This means:
 
 - Scripts use stable, documented Mojang names regardless of Minecraft version
 - No need to learn or track obfuscated intermediary names
 - Code is more readable and maintainable
+
+26.2-snapshot-4 does not use this path. It runs against Mojang-named classes directly and skips mapping download/remap entirely.
 
 ## Security Model
 
@@ -100,6 +102,7 @@ The core mod that runs inside Minecraft:
 - `core/` - Shared code: Lua runtime, WebSocket server, mapping resolver
 - `fabric-1.19/` - Fabric mod for Minecraft 1.19.x
 - `fabric-1.21.11/` - Fabric mod for Minecraft 1.21.11
+- `fabric-26.2-snapshot-4/` - Fabric mod for Minecraft 26.2-snapshot-4
 
 ### 2. Agent Module (`mod/agent/`, `mod/hooks/`)
 
@@ -117,7 +120,15 @@ cd mod
 ./gradlew build
 ```
 
-Output JARs are in `mod/fabric-*/build/libs/`.
+Output JARs are in `mod/fabric-*/build/libs/`, including `mod/fabric-26.2-snapshot-4/build/libs/`.
+
+## Supported Versions
+
+- Minecraft 1.19
+- Minecraft 1.21.11
+- Minecraft 26.2-snapshot-4
+
+The 26.2-snapshot-4 render-backed providers must work on both Vulkan and OpenGL backends.
 
 ## Usage
 
@@ -160,13 +171,13 @@ The Fabric mod JARs include these libraries (shaded):
 
 ### Network Behavior
 
-- **Outbound**: One HTTPS request at startup to download Mojang mappings from `piston-meta.mojang.com` and `launcher.mojang.com` (official Mojang APIs)
+- **Outbound**: Mapped builds may make an HTTPS request at startup to fetch Mojang mapping metadata from `piston-meta.mojang.com` and `launcher.mojang.com` (official Mojang APIs); 26.2-snapshot-4 skips that path
 - **Inbound**: WebSocket server on localhost:9876 (configurable via `DEBUGBRIDGE_PORT` environment variable)
 - **No telemetry, analytics, or other network activity**
 
 ### File System Access
 
-- **Reads**: Mojang mapping files (cached in game directory)
+- **Reads**: Mapped builds read Mojang mapping files cached in the game directory
 - **Writes**: 
   - Cached mappings in game directory
   - Screenshots to temp directory (when requested via MCP)
@@ -187,7 +198,8 @@ Lua was chosen because:
 ### Obfuscation Handling
 
 Minecraft's code is obfuscated differently across versions:
-- **1.19.x**: Uses Fabric's intermediary names at runtime, requires mapping
-- **1.21.11+**: Mojang removed obfuscation, names match directly
+- **1.19.x**: Uses Fabric's intermediary names at runtime and requires mappings
+- **1.21.11**: Uses the current mapping resolver behavior as implemented in this repository
+- **26.2-snapshot-4**: Unobfuscated; uses Mojang names directly and does not download or remap mappings
 
-The mod detects which environment it's running in and applies mappings only when needed.
+The mod detects which environment it's running in and applies mappings only for versions that need them.
