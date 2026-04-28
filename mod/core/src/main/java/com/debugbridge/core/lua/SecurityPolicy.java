@@ -7,19 +7,19 @@ import java.util.Set;
  */
 public class SecurityPolicy {
     private static final Set<String> BLOCKED_PREFIXES = Set.of(
-        "java.lang.Runtime",
-        "java.lang.ProcessBuilder",
-        "java.lang.System",
-        "java.io.",
-        "java.nio.file.",
-        "java.net.",
-        "java.security.",
-        "javax.net.",
-        "sun.",
-        "com.sun.",
-        "jdk."
+            "java.lang.Runtime",
+            "java.lang.ProcessBuilder",
+            "java.lang.System",
+            "java.io.",
+            "java.nio.file.",
+            "java.net.",
+            "java.security.",
+            "javax.net.",
+            "sun.",
+            "com.sun.",
+            "jdk."
     );
-
+    
     /**
      * Check if a class is safe to access from Lua.
      */
