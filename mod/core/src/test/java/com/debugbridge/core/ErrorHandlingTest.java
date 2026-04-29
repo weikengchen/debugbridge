@@ -193,10 +193,58 @@ class ErrorHandlingTest {
     }
 
     @Test
-    void testSecurityBlockedFileIO() throws Exception {
-        JsonObject resp = execute("java.import('java.io.File')");
-        assertFalse(resp.get("success").getAsBoolean());
-        System.out.println("File IO block: " + resp.get("error").getAsString());
+    void testFileIOAllowed() throws Exception {
+        // java.io.* / java.nio.file.* are intentionally allowed so scripts can
+        // write scratch files; only shell-out classes (Runtime, ProcessBuilder)
+        // and network classes stay blocked.
+        JsonObject resp = execute("local F = java.import('java.io.File'); return F ~= nil");
+        assertTrue(resp.get("success").getAsBoolean(),
+            "java.io.File should be importable: " + resp.get("error"));
+    }
+
+    @Test
+    void testSystemClassAllowed() throws Exception {
+        // java.lang.System is allowed so scripts can read the wall clock
+        // (System:currentTimeMillis(), nanoTime()).
+        JsonObject resp = execute("return java.import('java.lang.System'):currentTimeMillis()");
+        assertTrue(resp.get("success").getAsBoolean(),
+            "java.lang.System should be importable: " + resp.get("error"));
+    }
+
+    @Test
+    void testLuaIoLibraryAvailable() throws Exception {
+        // Lua's built-in io library is intentionally kept available so scripts
+        // can write scratch files via io.open(...). os is still nil because it
+        // exposes os.execute / os.exit.
+        java.nio.file.Path tmp = java.nio.file.Files.createTempFile("debugbridge-iotest", ".txt");
+        try {
+            JsonObject resp = execute(
+                "local f = io.open('" + tmp.toAbsolutePath() + "', 'w')\n" +
+                "f:write('hello from lua')\n" +
+                "f:close()\n" +
+                "local g = io.open('" + tmp.toAbsolutePath() + "', 'r')\n" +
+                "local data = g:read('*a')\n" +
+                "g:close()\n" +
+                "return data\n"
+            );
+            assertTrue(resp.get("success").getAsBoolean(),
+                "io.open round-trip should succeed: " + resp.get("error"));
+            assertEquals("hello from lua",
+                resp.get("result").getAsJsonObject().get("value").getAsString());
+        } finally {
+            java.nio.file.Files.deleteIfExists(tmp);
+        }
+    }
+
+    @Test
+    void testOsLibraryStillBlocked() throws Exception {
+        // Sanity: os.* (esp. os.execute) is still nil — the relaxation only
+        // covers file I/O, not shell-out.
+        JsonObject resp = execute("return os == nil");
+        assertTrue(resp.get("success").getAsBoolean(),
+            "os comparison should evaluate: " + resp.get("error"));
+        assertEquals(true,
+            resp.get("result").getAsJsonObject().get("value").getAsBoolean());
     }
 
     // ==================== Type conversion errors ====================

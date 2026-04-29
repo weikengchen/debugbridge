@@ -302,9 +302,23 @@ public class BridgeServer extends WebSocketServer {
         }
     }
 
+    // Hard ceiling on per-request Lua timeouts. Even if a caller asks for
+    // more, we cap here so a runaway script can't hang the bridge forever.
+    private static final long MAX_EXECUTE_TIMEOUT_MS = 300_000L;
+
     private BridgeResponse handleExecute(BridgeRequest req) {
         String code = req.payload.get("code").getAsString();
-        LuaRuntime.ExecutionResult result = lua.execute(code);
+
+        // Optional per-request override. Default (when absent or <= 0) is the
+        // runtime's configured timeout (10s). Heavy reflection over many
+        // entities can legitimately need more headroom — see CLAUDE.md.
+        long timeoutMs = 0;
+        if (req.payload.has("timeoutMs") && !req.payload.get("timeoutMs").isJsonNull()) {
+            long requested = req.payload.get("timeoutMs").getAsLong();
+            timeoutMs = Math.min(MAX_EXECUTE_TIMEOUT_MS, Math.max(0, requested));
+        }
+
+        LuaRuntime.ExecutionResult result = lua.execute(code, timeoutMs);
 
         if (!result.isSuccess()) {
             return BridgeResponse.error(req.id, result.error);

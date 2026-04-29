@@ -34,9 +34,12 @@ public class LuaRuntime {
         // Install a Lua debug hook that checks Thread.interrupted() periodically
         installInterruptHook();
 
-        // Security: remove dangerous globals
+        // Security: remove dangerous globals.
+        // `io` is kept so scripts can read/write scratch files via the standard
+        // Lua API; Java-side shell-out is still blocked by SecurityPolicy.
+        // `os` carries os.execute / os.exit / os.remove, so we drop it — scripts
+        // that need the wall clock can call java.lang.System:currentTimeMillis().
         globals.set("os", LuaValue.NIL);
-        globals.set("io", LuaValue.NIL);
         globals.set("luajava", LuaValue.NIL);
         globals.set("require", LuaValue.NIL);
         globals.set("loadfile", LuaValue.NIL);
@@ -111,10 +114,22 @@ public class LuaRuntime {
     }
 
     /**
-     * Execute Lua code with a timeout. Returns the result with captured print output.
-     * The Lua state persists — variables survive across calls.
+     * Execute Lua code using the runtime's default timeout
+     * ({@link #setMaxExecutionTimeMs}). The Lua state persists — variables
+     * survive across calls.
      */
     public ExecutionResult execute(String luaCode) {
+        return execute(luaCode, maxExecutionTimeMs);
+    }
+
+    /**
+     * Execute Lua code with an explicit per-call timeout. Use this when a
+     * caller knows their script needs more headroom than the default
+     * (e.g. bulk reflection over many entities). The supplied timeout is
+     * snapshotted, so concurrent callers don't see each other's overrides.
+     */
+    public ExecutionResult execute(String luaCode, long timeoutMs) {
+        final long effectiveTimeoutMs = timeoutMs > 0 ? timeoutMs : maxExecutionTimeMs;
         printBuffer.setLength(0);
 
         ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
@@ -139,7 +154,7 @@ public class LuaRuntime {
                 String msg = e.getMessage();
                 if (msg != null && msg.contains("interrupted")) {
                     return new ExecutionResult(null, printBuffer.toString(),
-                        "Execution timed out after " + maxExecutionTimeMs
+                        "Execution timed out after " + effectiveTimeoutMs
                         + "ms — script may have an infinite loop or infinite recursion");
                 }
                 return new ExecutionResult(null, printBuffer.toString(), msg);
@@ -158,14 +173,14 @@ public class LuaRuntime {
         });
 
         try {
-            return future.get(maxExecutionTimeMs, TimeUnit.MILLISECONDS);
+            return future.get(effectiveTimeoutMs, TimeUnit.MILLISECONDS);
         } catch (TimeoutException e) {
             future.cancel(true);
             // Also interrupt the lua thread directly
             Thread lt = luaThread;
             if (lt != null) lt.interrupt();
             return new ExecutionResult(null, printBuffer.toString(),
-                "Execution timed out after " + maxExecutionTimeMs
+                "Execution timed out after " + effectiveTimeoutMs
                 + "ms — script may have an infinite loop or infinite recursion");
         } catch (Exception e) {
             return new ExecutionResult(null, printBuffer.toString(),
