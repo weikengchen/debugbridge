@@ -16,13 +16,13 @@ $gradle = Join-Path $DebugBridgeRoot "gradlew.bat"
 $renderGradle = Join-Path $RenderModRoot "gradlew.bat"
 $agentJar = Join-Path $DebugBridgeRoot "agent\build\libs\debugbridge-agent-1.1.0.jar"
 $hooksJar = Join-Path $DebugBridgeRoot "hooks\build\libs\debugbridge-hooks-1.1.0.jar"
-$fabricJarGlob = Join-Path $DebugBridgeRoot "fabric-26.2-snapshot-4\build\libs\debugbridge-26.2-snapshot-4-*.jar"
+$fabricJarGlob = Join-Path $DebugBridgeRoot "fabric-26.2-dev\build\libs\debugbridge-26.2-snapshot-5-*.jar"
 $renderMods = Join-Path $RenderModRoot "run\mods"
 
 if (-not $SkipBuild) {
     Write-Step "Building DebugBridge artifacts"
-    # Primary verification tasks: :agent:test :core:test :hooks:jar :fabric-26.2-snapshot-4:jar
-    $gradleTasks = @(":agent:test", ":core:test", ":hooks:jar", ":fabric-26.2-snapshot-4:jar")
+    # Primary verification tasks: :agent:test :core:test :hooks:jar :fabric-26.2-dev:jar
+    $gradleTasks = @(":agent:test", ":core:test", ":hooks:jar", ":fabric-26.2-dev:jar")
     & $gradle @gradleTasks "--console=plain"
     if ($LASTEXITCODE -ne 0) {
         throw "DebugBridge Gradle verification failed with exit code $LASTEXITCODE"
@@ -34,11 +34,11 @@ $fabricJar = Get-ChildItem -Path $fabricJarGlob |
     Select-Object -First 1
 
 if ($null -eq $fabricJar) {
-    throw "Could not find built debugbridge-26.2-snapshot-4 jar at $fabricJarGlob"
+    throw "Could not find built debugbridge-26.2-snapshot-5 jar at $fabricJarGlob"
 }
 
 New-Item -ItemType Directory -Force -Path $renderMods | Out-Null
-Get-ChildItem -Path (Join-Path $renderMods "debugbridge-26.2-snapshot-4-*.jar") -ErrorAction SilentlyContinue |
+Get-ChildItem -Path (Join-Path $renderMods "debugbridge-26.2-snapshot-*.jar") -ErrorAction SilentlyContinue |
     Remove-Item -Force
 
 $destination = Join-Path $renderMods $fabricJar.Name

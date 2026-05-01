@@ -46,7 +46,7 @@ class RepositoryScaffoldingTest {
         
         String agentMap = Files.readString(agents);
         assertTrue(agentMap.contains("ARCHITECTURE.md"), "AGENTS.md should point to the architecture source of truth");
-        assertTrue(agentMap.contains(":agent:test :core:test :hooks:jar :fabric-26.2-snapshot-4:jar"),
+        assertTrue(agentMap.contains(":agent:test :core:test :hooks:jar :fabric-26.2-dev:jar"),
                 "AGENTS.md should contain the primary DebugBridge verification command");
         assertTrue(agentMap.contains("MCP live smoke"), "AGENTS.md should tell agents where the live smoke path starts");
         
@@ -74,7 +74,7 @@ class RepositoryScaffoldingTest {
         requireNoImports("agent", List.of(
                 "import com.debugbridge.fabric"
         ), violations);
-        for (String fabricModule : List.of("fabric-1.19", "fabric-1.21.11", "fabric-26.2-snapshot-4")) {
+        for (String fabricModule : List.of("fabric-1.19", "fabric-1.21.11", "fabric-26.2-dev")) {
             requireNoImports(fabricModule, List.of(
                     "import com.debugbridge.agent.",
                     "import com.debugbridge.hooks."
@@ -94,9 +94,9 @@ class RepositoryScaffoldingTest {
         assertTrue(Files.isRegularFile(guide), "docs/live-smoke.md should hold the MCP live-test recipe");
         
         String scriptText = Files.readString(script);
-        assertTrue(scriptText.contains(":agent:test :core:test :hooks:jar :fabric-26.2-snapshot-4:jar"),
+        assertTrue(scriptText.contains(":agent:test :core:test :hooks:jar :fabric-26.2-dev:jar"),
                 "live smoke script should build the affected DebugBridge artifacts");
-        assertTrue(scriptText.contains("debugbridge-26.2-snapshot-4"),
+        assertTrue(scriptText.contains("debugbridge-26.2-snapshot-5"),
                 "live smoke script should copy the 26.2 Fabric jar into the render-mod run folder");
         assertTrue(scriptText.contains("-Pdebugbridge.agent.jar="),
                 "live smoke script should pass the built agent jar path into runClient");
@@ -108,5 +108,24 @@ class RepositoryScaffoldingTest {
         assertTrue(guideText.contains("mc_logger"), "live smoke guide should use MCP logger calls");
         assertTrue(guideText.contains("mc_execute"), "live smoke guide should use MCP execute calls");
         assertFalse(guideText.contains("cli shim"), "live smoke guide should not route Minecraft actions through CLI shims");
+    }
+
+    @Test
+    void latestSnapshotRegistersMcpRuntimeParityProviders() throws IOException {
+        Path module = repoRoot().resolve("fabric-26.2-dev");
+        Path mod = module.resolve("src/main/java/com/debugbridge/fabric262/DebugBridgeMod.java");
+
+        assertTrue(Files.isRegularFile(module.resolve(
+                        "src/main/java/com/debugbridge/fabric262/Minecraft262ScreenInspectProvider.java")),
+                "26.2 should expose the screenInspect bridge endpoint used by mcdev-mcp 1.1");
+        assertTrue(Files.isRegularFile(module.resolve(
+                        "src/main/java/com/debugbridge/fabric262/Minecraft262ChatHistoryProvider.java")),
+                "26.2 should expose the chatHistory bridge endpoint used by mcdev-mcp 1.1");
+
+        String source = Files.readString(mod);
+        assertTrue(source.contains("setScreenInspectProvider"),
+                "26.2 should register a ScreenInspectProvider with BridgeServer");
+        assertTrue(source.contains("setChatHistoryProvider"),
+                "26.2 should register a ChatHistoryProvider with BridgeServer");
     }
 }

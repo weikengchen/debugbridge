@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class DebugBridgeMod implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("DebugBridge");
-    private static final String MC_VERSION = "26.2-snapshot-4";
+    private static final String MC_VERSION = "26.2-snapshot-5";
     
     private static final int PORT_RANGE_START = 9876;
     private static final int PORT_RANGE_END = 9886;
@@ -135,6 +135,10 @@ public class DebugBridgeMod implements ClientModInitializer {
         server.setTextureProvider(textureProvider);
         server.setEntitiesProvider(entitiesProvider);
         server.setLookedAtEntityProvider(lookedAtProvider);
+        server.setChatHistoryProvider(new Minecraft262ChatHistoryProvider());
+        server.setScreenInspectProvider(new Minecraft262ScreenInspectProvider());
+        server.setLoggerInjectionEnabled(config.loggerInjectionEnabled);
+        server.setRunCommandEnabled(config.runCommandEnabled);
         
         if (actualPort != config.port) {
             startupInfo = "Server started on port " + actualPort + " (default " + config.port + " was in use)";

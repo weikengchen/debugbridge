@@ -84,7 +84,7 @@ class ReflectiveLoggerServiceTest {
         assertTrue(DebugBridgeLogger.lastFilter.test(new Object[0]));
         
         assertEquals(1, service.listActive().size());
-        assertEquals("example.Target.method", service.listInjectedMethods().getFirst());
+        assertEquals("example.Target.method", service.listInjectedMethods().get(0));
         assertTrue(service.cancel(first.loggerId()));
         assertTrue(service.listActive().isEmpty());
         

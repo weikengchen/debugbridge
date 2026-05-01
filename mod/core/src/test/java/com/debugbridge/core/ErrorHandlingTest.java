@@ -216,12 +216,13 @@ class ErrorHandlingTest {
         // can write scratch files via io.open(...). os is still nil because it
         // exposes os.execute / os.exit.
         java.nio.file.Path tmp = java.nio.file.Files.createTempFile("debugbridge-iotest", ".txt");
+        String luaPath = tmp.toAbsolutePath().toString().replace("\\", "\\\\");
         try {
             JsonObject resp = execute(
-                "local f = io.open('" + tmp.toAbsolutePath() + "', 'w')\n" +
+                "local f = io.open('" + luaPath + "', 'w')\n" +
                 "f:write('hello from lua')\n" +
                 "f:close()\n" +
-                "local g = io.open('" + tmp.toAbsolutePath() + "', 'r')\n" +
+                "local g = io.open('" + luaPath + "', 'r')\n" +
                 "local data = g:read('*a')\n" +
                 "g:close()\n" +
                 "return data\n"

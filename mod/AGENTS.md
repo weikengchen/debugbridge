@@ -9,7 +9,7 @@ keep enforceable rules in tests or scripts.
 - MCP live smoke path: `docs/live-smoke.md`
 - Live smoke preparation script: `tools/debugbridge-live-smoke.ps1`
 - Main verification command:
-  `.\gradlew.bat :agent:test :core:test :hooks:jar :fabric-26.2-snapshot-4:jar --console=plain`
+  `.\gradlew.bat :agent:test :core:test :hooks:jar :fabric-26.2-dev:jar --console=plain`
 
 ## Project Shape
 
@@ -31,5 +31,5 @@ keep enforceable rules in tests or scripts.
   classloader boundary in `ARCHITECTURE.md`.
 - Prefer MCP tool calls for Minecraft live checks: `mc_connect`, `mc_logger`,
   and `mc_execute`.
-- Treat `fabric-26.2-snapshot-4/src/main/resources/fabric.mod.json` as
+- Treat `fabric-26.2-dev/src/main/resources/fabric.mod.json` as
   potentially user-edited unless your task explicitly touches metadata.

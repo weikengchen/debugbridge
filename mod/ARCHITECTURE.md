@@ -61,7 +61,7 @@ Disallowed edges that are enforced by `RepositoryScaffoldingTest`:
 Primary command:
 
 ```powershell
-.\gradlew.bat :agent:test :core:test :hooks:jar :fabric-26.2-snapshot-4:jar --console=plain
+.\gradlew.bat :agent:test :core:test :hooks:jar :fabric-26.2-dev:jar --console=plain
 ```
 
 Live Minecraft verification starts with `docs/live-smoke.md`.

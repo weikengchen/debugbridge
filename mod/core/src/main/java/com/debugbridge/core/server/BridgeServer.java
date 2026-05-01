@@ -475,15 +475,21 @@ public class BridgeServer extends WebSocketServer {
 
     private BridgeResponse handleRunCommand(BridgeRequest req) {
         String command = req.payload.get("command").getAsString();
-        // This needs to be implemented via the version-specific module
-        // For now, execute via Lua
+        String quoted = luaString(command);
         String luaCode = String.format(
                 """
                         local mc = java.import('net.minecraft.client.Minecraft'):getInstance()
-                        mc.player:connection():sendCommand('%s')
-                        return 'Command sent: %s'""",
-                command.replace("'", "\\'"),
-                command.replace("'", "\\'")
+                        local player = mc.player
+                        if player == nil then error('Player not available') end
+                        local ok, connection = pcall(function() return player.connection end)
+                        if (not ok) or connection == nil then
+                          ok, connection = pcall(function() return player:connection() end)
+                        end
+                        if (not ok) or connection == nil then error('Player connection not available') end
+                        connection:sendCommand(%s)
+                        return 'Command sent: ' .. %s""",
+                quoted,
+                quoted
         );
         return handleExecute(new BridgeRequest(req.id, "execute",
                 createPayload("code", luaCode)));
@@ -521,6 +527,24 @@ public class BridgeServer extends WebSocketServer {
         JsonObject payload = new JsonObject();
         payload.addProperty(key, value);
         return payload;
+    }
+
+    private static String luaString(String value) {
+        StringBuilder out = new StringBuilder(value.length() + 2);
+        out.append('"');
+        for (int i = 0; i < value.length(); i++) {
+            char ch = value.charAt(i);
+            switch (ch) {
+                case '\\' -> out.append("\\\\");
+                case '"' -> out.append("\\\"");
+                case '\n' -> out.append("\\n");
+                case '\r' -> out.append("\\r");
+                case '\t' -> out.append("\\t");
+                default -> out.append(ch);
+            }
+        }
+        out.append('"');
+        return out.toString();
     }
     
     // ==================== Item Texture Handler ====================

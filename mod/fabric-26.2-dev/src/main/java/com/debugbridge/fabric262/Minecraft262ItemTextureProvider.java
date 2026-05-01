@@ -10,19 +10,14 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.PoseStack;
-import it.unimi.dsi.fastutil.objects.ObjectLinkedOpenHashSet;
-import it.unimi.dsi.fastutil.objects.ObjectSortedSets;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.*;
 import net.minecraft.client.renderer.feature.FeatureRenderDispatcher;
 import net.minecraft.client.renderer.item.ItemModelResolver;
 import net.minecraft.client.renderer.item.TrackingItemStackRenderState;
-import net.minecraft.client.renderer.rendertype.RenderType;
-import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.Identifier;
-import net.minecraft.util.Util;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -36,7 +31,6 @@ import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.util.Base64;
-import java.util.SequencedSet;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -48,23 +42,6 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
     private static final int TEXTURE_SIZE = 32;
     private static final int MAP_SIZE = 128;
     private static final int[] BRIGHTNESS_MOD = {180, 220, 255, 135};
-    
-    private static MultiBufferSource.BufferSource createMainBufferSource() {
-        SequencedSet<RenderType> fixedTypes = Util.make(new ObjectLinkedOpenHashSet<>(), types -> {
-            types.add(Sheets.cutoutBlockItemSheet());
-            types.add(Sheets.translucentBlockItemSheet());
-            types.add(Sheets.cutoutItemSheet());
-            types.add(Sheets.translucentItemSheet());
-            types.add(RenderTypes.glint());
-            types.add(RenderTypes.glintTranslucent());
-            types.add(RenderTypes.waterMask());
-        });
-        return MultiBufferSource.create(786432, fixedTypes);
-    }
-    
-    private static MultiBufferSource.BufferSource createOutlineBufferSource() {
-        return MultiBufferSource.create(1536, ObjectSortedSets.emptySet());
-    }
     
     private static int mapPixelArgb(byte packedColor) {
         int colorId = (packedColor & 0xFF) >> 2;
@@ -188,17 +165,18 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
                 var device = RenderSystem.getDevice();
                 colorTex = device.createTexture(() -> "dbg_item_color",
                         GpuTexture.USAGE_COPY_SRC
+                                | GpuTexture.USAGE_COPY_DST
                                 | GpuTexture.USAGE_TEXTURE_BINDING
                                 | GpuTexture.USAGE_RENDER_ATTACHMENT,
                         GpuFormat.RGBA8_UNORM, size, size, 1, 1);
                 colorView = device.createTextureView(colorTex);
                 depthTex = device.createTexture(() -> "dbg_item_depth",
-                        GpuTexture.USAGE_RENDER_ATTACHMENT,
+                        GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_RENDER_ATTACHMENT,
                         GpuFormat.D32_FLOAT, size, size, 1, 1);
                 depthView = device.createTextureView(depthTex);
                 
                 device.createCommandEncoder().clearColorAndDepthTextures(
-                        colorTex, 0, depthTex, 1.0);
+                        colorTex, 0, depthTex, 0.0);
                 
                 savedColor = RenderSystem.outputColorTextureOverride;
                 savedDepth = RenderSystem.outputDepthTextureOverride;
@@ -316,18 +294,14 @@ public class Minecraft262ItemTextureProvider implements ItemTextureProvider {
             PoseStack poseStack
     ) {
         SubmitNodeStorage collector = new SubmitNodeStorage();
-        try (MultiBufferSource.BufferSource bufferSource = createMainBufferSource();
-             OutlineBufferSource outlineBufferSource = new OutlineBufferSource(createOutlineBufferSource());
-             FeatureRenderDispatcher features = new FeatureRenderDispatcher(
-                     collector,
+        try (FeatureRenderDispatcher features = new FeatureRenderDispatcher(
+                     mc.gameRenderer.renderBuffers(),
                      mc.getModelManager(),
-                     bufferSource,
                      mc.getAtlasManager(),
-                     outlineBufferSource,
                      mc.font,
                      mc.gameRenderer.gameRenderState())) {
             renderState.submit(poseStack, collector, 15728880, OverlayTexture.NO_OVERLAY, 0);
-            features.renderAllFeatures();
+            features.renderAllFeatures(collector);
         }
     }
     

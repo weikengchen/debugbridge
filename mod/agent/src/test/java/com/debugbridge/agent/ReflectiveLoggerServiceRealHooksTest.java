@@ -55,7 +55,7 @@ class ReflectiveLoggerServiceRealHooksTest {
         );
         
         assertTrue(result.success());
-        assertEquals("example.Target.method", service.listActive().getFirst().method());
+        assertEquals("example.Target.method", service.listActive().get(0).method());
         assertTrue(service.listInjectedMethods().contains("example.Target.method"));
         assertTrue(service.cancel(result.loggerId()));
     }

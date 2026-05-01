@@ -6,17 +6,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MOD_DIR="${SCRIPT_DIR}/mod"
 MODRINTH_PROFILE_NAME="${MODRINTH_PROFILE_NAME:-REPLACE-WITH-PROFILE-NAME}"
 
-JAR_NAME="debugbridge-26.2-snapshot-4-1.1.0.jar"
-OLD_JAR_NAMES=("debugbridge-26.2-snapshot-4-1.0.0.jar" "debugbridge-26.2-snapshot-3-1.1.0.jar" "debugbridge-26.2-snapshot-3-1.0.0.jar")
-SOURCE_JAR="${MOD_DIR}/fabric-26.2-snapshot-4/build/libs/${JAR_NAME}"
+JAR_NAME="debugbridge-26.2-snapshot-5-1.1.0.jar"
+OLD_JAR_NAMES=("debugbridge-26.2-snapshot-5-1.0.0.jar" "debugbridge-26.2-snapshot-4-1.1.0.jar" "debugbridge-26.2-snapshot-4-1.0.0.jar" "debugbridge-26.2-snapshot-3-1.1.0.jar" "debugbridge-26.2-snapshot-3-1.0.0.jar")
+SOURCE_JAR="${MOD_DIR}/fabric-26.2-dev/build/libs/${JAR_NAME}"
 
-echo "Building DebugBridge mod (fabric-26.2-snapshot-4)..."
+echo "Building DebugBridge mod (fabric-26.2-dev)..."
 cd "${MOD_DIR}"
 # Remove stale outputs from any older archivesName values.
 for old in "${OLD_JAR_NAMES[@]}"; do
-    rm -f "${MOD_DIR}/fabric-26.2-snapshot-4/build/libs/${old}"
+    rm -f "${MOD_DIR}/fabric-26.2-dev/build/libs/${old}"
 done
-JAVA_HOME=/opt/homebrew/opt/openjdk@26 ./gradlew :fabric-26.2-snapshot-4:build --no-daemon
+JAVA_HOME=/opt/homebrew/opt/openjdk@26 ./gradlew :fabric-26.2-dev:build --no-daemon
 
 if [ ! -f "${SOURCE_JAR}" ]; then
     echo "Error: Build artifact not found at ${SOURCE_JAR}"
