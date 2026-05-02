@@ -14,9 +14,9 @@ public interface ScreenInspectProvider {
      * Snapshot the currently-open screen.
      *
      * @return JSON object with {open: bool, type, title}. For container screens
-     *         also {menuClass, slots: [{idx, container, item:{itemId, count,
-     *         damage, maxDamage, name}}]}. {open: false} when no screen is
-     *         displayed.
+     * also {menuClass, slots: [{idx, container, item:{itemId, count,
+     * damage, maxDamage, name}}]}. {open: false} when no screen is
+     * displayed.
      * @throws Exception on query failure
      */
     JsonObject inspectCurrentScreen() throws Exception;

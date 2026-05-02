@@ -11,56 +11,74 @@ import java.util.function.Predicate;
  */
 public class LogFilters {
 
-    /** Log only when argument at index matches a value via equals(). */
+    /**
+     * Log only when argument at index matches a value via equals().
+     */
     public static Predicate<Object[]> argEquals(int index, Object value) {
         return args -> {
             try {
                 return args != null && args.length > index
-                    && Objects.equals(args[index], value);
-            } catch (Throwable t) { return false; }
+                        && Objects.equals(args[index], value);
+            } catch (Throwable t) {
+                return false;
+            }
         };
     }
 
-    /** Log only when argument.toString() contains a substring. */
+    /**
+     * Log only when argument.toString() contains a substring.
+     */
     public static Predicate<Object[]> argContains(int index, String substring) {
         return args -> {
             try {
                 return args != null && args.length > index
-                    && args[index] != null
-                    && args[index].toString().contains(substring);
-            } catch (Throwable t) { return false; }
+                        && args[index] != null
+                        && args[index].toString().contains(substring);
+            } catch (Throwable t) {
+                return false;
+            }
         };
     }
 
-    /** Log only when argument is an instance of a type (partial name match). */
+    /**
+     * Log only when argument is an instance of a type (partial name match).
+     */
     public static Predicate<Object[]> argInstanceOf(int index, String classNameFragment) {
         return args -> {
             try {
                 return args != null && args.length > index
-                    && args[index] != null
-                    && args[index].getClass().getName().contains(classNameFragment);
-            } catch (Throwable t) { return false; }
+                        && args[index] != null
+                        && args[index].getClass().getName().contains(classNameFragment);
+            } catch (Throwable t) {
+                return false;
+            }
         };
     }
 
-    /** Rate-limit: log at most once per intervalMs milliseconds. */
+    /**
+     * Rate-limit: log at most once per intervalMs milliseconds.
+     */
     public static Predicate<Object[]> throttle(long intervalMs) {
         AtomicLong lastLog = new AtomicLong(0);
         return args -> {
             long now = System.currentTimeMillis();
             long last = lastLog.get();
             return now - last >= intervalMs
-                && lastLog.compareAndSet(last, now);
+                    && lastLog.compareAndSet(last, now);
         };
     }
 
-    /** Sample: log only every N calls. */
+    /**
+     * Sample: log only every N calls.
+     */
     public static Predicate<Object[]> sample(int n) {
         AtomicLong counter = new AtomicLong(0);
         return args -> counter.incrementAndGet() % n == 0;
     }
 
-    /** Combine multiple filters with AND logic. */
+    /**
+     * Combine multiple filters with AND logic.
+     */
     @SafeVarargs
     public static Predicate<Object[]> and(Predicate<Object[]>... filters) {
         return args -> {
@@ -71,7 +89,9 @@ public class LogFilters {
         };
     }
 
-    /** Combine multiple filters with OR logic. */
+    /**
+     * Combine multiple filters with OR logic.
+     */
     @SafeVarargs
     public static Predicate<Object[]> or(Predicate<Object[]>... filters) {
         return args -> {
@@ -82,17 +102,23 @@ public class LogFilters {
         };
     }
 
-    /** Negate a filter. */
+    /**
+     * Negate a filter.
+     */
     public static Predicate<Object[]> not(Predicate<Object[]> filter) {
         return args -> !filter.test(args);
     }
 
-    /** Always log (no filtering). */
+    /**
+     * Always log (no filtering).
+     */
     public static Predicate<Object[]> always() {
         return args -> true;
     }
 
-    /** Never log (for testing). */
+    /**
+     * Never log (for testing).
+     */
     public static Predicate<Object[]> never() {
         return args -> false;
     }

@@ -4,21 +4,21 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Caches bytecode AFTER Mixin and other transformers have run.
- *
+ * <p>
  * When retransforming a class, the JVM provides the ORIGINAL bytecode
  * (pre-transformation), not the current bytecode. This means any Mixin
  * injections would be stripped if we retransform naively.
- *
+ * <p>
  * This cache captures the post-Mixin bytecode so our advice injection
  * can use it as the baseline, preserving all existing transformations.
- *
+ * <p>
  * Must be on the bootstrap classloader alongside DebugBridgeLogger.
  */
 public class BytecodeCache {
 
     // className (internal format: com/example/MyClass) -> bytecode
     private static final ConcurrentHashMap<String, byte[]> cache =
-        new ConcurrentHashMap<>();
+            new ConcurrentHashMap<>();
 
     // Track whether our observer transformer has been installed
     private static volatile boolean observerInstalled = false;
@@ -37,6 +37,7 @@ public class BytecodeCache {
 
     /**
      * Get cached bytecode for a class.
+     *
      * @return The cached bytecode, or null if not cached
      */
     public static byte[] get(String className) {
@@ -66,17 +67,17 @@ public class BytecodeCache {
     }
 
     /**
-     * Mark that our observer transformer has been installed.
-     */
-    public static void setObserverInstalled(boolean installed) {
-        observerInstalled = installed;
-    }
-
-    /**
      * Check if our observer is active.
      */
     public static boolean isObserverInstalled() {
         return observerInstalled;
+    }
+
+    /**
+     * Mark that our observer transformer has been installed.
+     */
+    public static void setObserverInstalled(boolean installed) {
+        observerInstalled = installed;
     }
 
     /**
@@ -93,9 +94,9 @@ public class BytecodeCache {
     private static boolean detectMixin() {
         // Check for common Mixin classes
         String[] mixinClasses = {
-            "org.spongepowered.asm.mixin.Mixin",
-            "org.spongepowered.asm.mixin.transformer.MixinTransformer",
-            "org.spongepowered.asm.service.MixinService"
+                "org.spongepowered.asm.mixin.Mixin",
+                "org.spongepowered.asm.mixin.transformer.MixinTransformer",
+                "org.spongepowered.asm.service.MixinService"
         };
 
         for (String className : mixinClasses) {
@@ -114,6 +115,6 @@ public class BytecodeCache {
      */
     public static String getStats() {
         return String.format("BytecodeCache: %d classes cached, observer=%s, mixin=%s",
-            cache.size(), observerInstalled, mixinPresent);
+                cache.size(), observerInstalled, mixinPresent);
     }
 }

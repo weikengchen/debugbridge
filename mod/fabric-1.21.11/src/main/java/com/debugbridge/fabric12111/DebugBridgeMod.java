@@ -3,11 +3,7 @@ package com.debugbridge.fabric12111;
 import com.debugbridge.core.BridgeConfig;
 import com.debugbridge.core.block.ClientBlockGlowManager;
 import com.debugbridge.core.lua.ThreadDispatcher;
-import com.debugbridge.core.mapping.MappingCache;
-import com.debugbridge.core.mapping.MappingDownloader;
-import com.debugbridge.core.mapping.ProGuardParser;
-import com.debugbridge.core.mapping.ParsedMappings;
-import com.debugbridge.core.mapping.MappingResolver;
+import com.debugbridge.core.mapping.*;
 import com.debugbridge.core.screenshot.ScreenshotProvider;
 import com.debugbridge.core.server.BridgeServer;
 import com.debugbridge.core.snapshot.GameStateProvider;
@@ -19,6 +15,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.EntityHitResult;
@@ -26,8 +23,6 @@ import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import net.minecraft.network.chat.Component;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -40,16 +35,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class DebugBridgeMod implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("DebugBridge");
     private static final String MC_VERSION = "1.21.11";
-
+    private static final int PORT_RANGE_START = 9876;
+    private static final int PORT_RANGE_END = 9886;
     private static DebugBridgeMod INSTANCE;
-
-    private BridgeConfig config;
-    private BridgeServer server;
     private final AtomicBoolean warningShown = new AtomicBoolean(false);
     private final AtomicBoolean serverStarted = new AtomicBoolean(false);
+    private BridgeConfig config;
+    private BridgeServer server;
     private boolean needsWarning = false;
     private String startupError = null;
     private String startupInfo = null;  // Info message (e.g., port changed)
+
+    /**
+     * Called by MinecraftClientMixin on each client tick.
+     */
+    public static void onClientTick(Minecraft mc) {
+        if (INSTANCE != null) {
+            INSTANCE.handleTick(mc);
+        }
+    }
 
     @Override
     public void onInitializeClient() {
@@ -69,27 +73,18 @@ public class DebugBridgeMod implements ClientModInitializer {
         }
     }
 
-    /**
-     * Called by MinecraftClientMixin on each client tick.
-     */
-    public static void onClientTick(Minecraft mc) {
-        if (INSTANCE != null) {
-            INSTANCE.handleTick(mc);
-        }
-    }
-
     private void handleTick(Minecraft mc) {
         // Show startup messages when player is available
         if (startupError != null && mc.player != null) {
             mc.player.displayClientMessage(
-                Component.literal("[DebugBridge] " + startupError).withStyle(s -> s.withColor(0xFF5555)),
-                false);
+                    Component.literal("[DebugBridge] " + startupError).withStyle(s -> s.withColor(0xFF5555)),
+                    false);
             startupError = null;
         }
         if (startupInfo != null && mc.player != null) {
             mc.player.displayClientMessage(
-                Component.literal("[DebugBridge] " + startupInfo).withStyle(s -> s.withColor(0x55FF55)),
-                false);
+                    Component.literal("[DebugBridge] " + startupInfo).withStyle(s -> s.withColor(0x55FF55)),
+                    false);
             startupInfo = null;
         }
 
@@ -123,9 +118,6 @@ public class DebugBridgeMod implements ClientModInitializer {
             lr.gameTestBlockHighlightRenderer.highlightPos(pos, pos);
         }
     }
-
-    private static final int PORT_RANGE_START = 9876;
-    private static final int PORT_RANGE_END = 9886;
 
     private void startServer() {
         if (serverStarted.getAndSet(true)) {
@@ -189,7 +181,7 @@ public class DebugBridgeMod implements ClientModInitializer {
     private int startServerOnAvailablePort(int preferredPort, MappingResolver resolver,
                                            ThreadDispatcher dispatcher, GameStateProvider stateProvider,
                                            ScreenshotProvider screenshotProvider) {
-        int startPort = Math.max(PORT_RANGE_START, Math.min(PORT_RANGE_END, preferredPort));
+        int startPort = Math.max(PORT_RANGE_START, Math.min(preferredPort, PORT_RANGE_END));
 
         // First pass: preferred port -> end of range
         for (int port = startPort; port <= PORT_RANGE_END; port++) {
@@ -286,15 +278,19 @@ public class DebugBridgeMod implements ClientModInitializer {
                 playerObj.addProperty("food", player.getFoodData().getFoodLevel());
                 playerObj.addProperty("saturation", player.getFoodData().getSaturationLevel());
                 playerObj.addProperty("dimension",
-                    player.level().dimension().identifier().toString());
+                        player.level().dimension().identifier().toString());
                 playerObj.addProperty("biome", "");
                 Vec3 vel = player.getDeltaMovement();
                 JsonObject velObj = new JsonObject();
-                velObj.addProperty("x", vel.x); velObj.addProperty("y", vel.y); velObj.addProperty("z", vel.z);
+                velObj.addProperty("x", vel.x);
+                velObj.addProperty("y", vel.y);
+                velObj.addProperty("z", vel.z);
                 playerObj.add("velocity", velObj);
                 Vec3 look = player.getLookAngle();
                 JsonObject lookObj = new JsonObject();
-                lookObj.addProperty("x", look.x); lookObj.addProperty("y", look.y); lookObj.addProperty("z", look.z);
+                lookObj.addProperty("x", look.x);
+                lookObj.addProperty("y", look.y);
+                lookObj.addProperty("z", look.z);
                 playerObj.add("look", lookObj);
                 Entity vehicle = player.getVehicle();
                 if (vehicle != null) {

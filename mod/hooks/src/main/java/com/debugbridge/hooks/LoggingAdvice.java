@@ -5,7 +5,7 @@ import net.bytebuddy.implementation.bytecode.assign.Assigner;
 
 /**
  * A Byte Buddy @Advice class whose bytecode is inlined into target methods.
- *
+ * <p>
  * IMPORTANT: This class is NEVER called at runtime. Byte Buddy reads its
  * bytecode at transformation time and inlines it into target methods.
  * Therefore:
@@ -22,7 +22,7 @@ public class LoggingAdvice {
      */
     @Advice.OnMethodEnter
     static long onEnter(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.This(optional = true) Object self,
             @Advice.AllArguments Object[] args) {
         return DebugBridgeLogger.onEntry(method, self, args);
@@ -34,9 +34,9 @@ public class LoggingAdvice {
      */
     @Advice.OnMethodExit(onThrowable = Throwable.class)
     static void onExit(
-            @Advice.Origin String method,
+            @Advice.Origin("#t.#m") String method,
             @Advice.Return(readOnly = true,
-                           typing = Assigner.Typing.DYNAMIC) Object ret,
+                    typing = Assigner.Typing.DYNAMIC) Object ret,
             @Advice.Thrown Throwable thrown,
             @Advice.Enter long startTime) {
         if (startTime != 0L) {

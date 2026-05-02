@@ -9,14 +9,14 @@ import java.util.*;
 
 /**
  * MappingResolver for Fabric 1.19 that resolves Mojang names to intermediary names.
- *
+ * <p>
  * Class resolution: ProGuard (Mojang→obfuscated) + Fabric (obfuscated→intermediary)
- *
+ * <p>
  * Method/field resolution: Uses Fabric's mapMethodName/mapFieldName with the obfuscated
  * names from ProGuard. Since Fabric only maps methods on the declaring class/interface
  * (not subclasses), we walk the ProGuard hierarchy to find which class originally declares
  * the method, then query Fabric with that class's obfuscated name.
- *
+ * <p>
  * Fallback: descriptor-based matching against runtime methods via reflection.
  */
 public class FabricMojangResolver implements MappingResolver {
@@ -92,7 +92,7 @@ public class FabricMojangResolver implements MappingResolver {
     @Override
     public String resolveMethod(String mojangClassName, String mojangMethodName, String[] mojangParamTypes) {
         String cacheKey = mojangClassName + "." + mojangMethodName
-            + (mojangParamTypes != null ? "(" + String.join(",", mojangParamTypes) + ")" : "");
+                + (mojangParamTypes != null ? "(" + String.join(",", mojangParamTypes) + ")" : "");
         String cached = methodCache.get(cacheKey);
         if (cached != null) return cached;
 
@@ -133,7 +133,7 @@ public class FabricMojangResolver implements MappingResolver {
         if (proguardDesc != null) {
             String obfJvmDesc = toObfuscatedJvmMethodDescriptor(proguardDesc);
             String result = tryFabricMethodMapping(mojangClassName, mojangMethodName,
-                matchedKey, obfMethodName, obfJvmDesc);
+                    matchedKey, obfMethodName, obfJvmDesc);
             if (result != null) {
                 methodCache.put(cacheKey, result);
                 return result;
@@ -157,7 +157,7 @@ public class FabricMojangResolver implements MappingResolver {
     /**
      * Ask Fabric to translate (mojangClassName.obfMethodName / obfJvmDesc) from the
      * "official" namespace into the runtime intermediary namespace.
-     *
+     * <p>
      * Critically, this is STRICT — it only consults the originally-passed Mojang
      * class. An earlier version walked every class in the ProGuard mappings that
      * declared a method with the same name; that produced confidently-wrong
@@ -168,7 +168,7 @@ public class FabricMojangResolver implements MappingResolver {
      * ancestor).
      */
     private String tryFabricMethodMapping(String mojangClassName, String mojangMethodName,
-                                           String methodKey, String obfMethodName, String obfJvmDesc) {
+                                          String methodKey, String obfMethodName, String obfJvmDesc) {
         String obfClass = mappings.classes.getOrDefault(mojangClassName, mojangClassName);
         try {
             String mapped = fabricResolver.mapMethodName("official", obfClass, obfMethodName, obfJvmDesc);
@@ -185,7 +185,7 @@ public class FabricMojangResolver implements MappingResolver {
      * Try Fabric's mapFieldName on the declaring class.
      */
     private String tryFabricFieldMapping(String mojangClassName, String mojangFieldName,
-                                          String obfFieldName, String mojangType) {
+                                         String obfFieldName, String mojangType) {
         String obfClass = mappings.classes.getOrDefault(mojangClassName, mojangClassName);
         if (mojangType != null) {
             String obfDesc = toJvmDescriptor(obfuscateTypeName(mojangType));
@@ -283,10 +283,14 @@ public class FabricMojangResolver implements MappingResolver {
     }
 
     @Override
-    public String getVersion() { return version; }
+    public String getVersion() {
+        return version;
+    }
 
     @Override
-    public boolean isObfuscated() { return true; }
+    public boolean isObfuscated() {
+        return true;
+    }
 
     // ==================== Type resolution helpers ====================
 
@@ -294,12 +298,10 @@ public class FabricMojangResolver implements MappingResolver {
         if (mojangType.endsWith("[]")) {
             return resolveTypeName(mojangType.substring(0, mojangType.length() - 2)) + "[]";
         }
-        switch (mojangType) {
-            case "void": case "boolean": case "byte": case "char":
-            case "short": case "int": case "long": case "float": case "double":
-                return mojangType;
-        }
-        return resolveClass(mojangType);
+        return switch (mojangType) {
+            case "void", "boolean", "byte", "char", "short", "int", "long", "float", "double" -> mojangType;
+            default -> resolveClass(mojangType);
+        };
     }
 
     private String obfuscateTypeName(String mojangType) {

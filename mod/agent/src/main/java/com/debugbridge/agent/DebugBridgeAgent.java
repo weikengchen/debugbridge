@@ -2,34 +2,24 @@ package com.debugbridge.agent;
 
 import com.debugbridge.hooks.BytecodeCache;
 import com.debugbridge.hooks.DebugBridgeLogger;
-import com.debugbridge.hooks.LoggingAdvice;
-import net.bytebuddy.agent.builder.AgentBuilder;
-import net.bytebuddy.asm.Advice;
-import net.bytebuddy.description.type.TypeDescription;
-import net.bytebuddy.dynamic.ClassFileLocator;
-import net.bytebuddy.dynamic.DynamicType;
-import net.bytebuddy.pool.TypePool;
-import net.bytebuddy.utility.JavaModule;
 
 import java.lang.instrument.Instrumentation;
-import java.security.ProtectionDomain;
 import java.util.jar.JarFile;
-
-import static net.bytebuddy.matcher.ElementMatchers.named;
 
 /**
  * Java Agent entry point for DebugBridge runtime logging.
- *
+ * <p>
  * Supports two loading modes:
  * 1. premain: Loaded via -javaagent at JVM startup (preferred)
  * 2. agentmain: Attached to running JVM via ByteBuddyAgent.install()
- *
+ * <p>
  * Mixin Compatibility:
  * This agent is designed to work alongside SpongePowered Mixin. We use
  * BytecodeCache to capture post-Mixin bytecode and ensure our transformations
  * don't strip Mixin injections. See BytecodeCache and BytecodeObserver.
  */
 public class DebugBridgeAgent {
+    private static final String BYTE_BUDDY_EXPERIMENTAL = "net.bytebuddy.experimental";
 
     private static Instrumentation instrumentation;
     private static volatile boolean initialized = false;
@@ -58,6 +48,7 @@ public class DebugBridgeAgent {
 
         instrumentation = inst;
         System.out.println("[DebugBridge] Agent initializing via " + mode);
+        enableByteBuddyExperimentalMode();
 
         // Load the hooks JAR onto bootstrap classloader
         String hooksJarPath = resolveHooksJarPath(args);
@@ -88,6 +79,13 @@ public class DebugBridgeAgent {
         System.out.println("[DebugBridge] Agent initialized successfully");
     }
 
+    private static void enableByteBuddyExperimentalMode() {
+        if (!"true".equalsIgnoreCase(System.getProperty(BYTE_BUDDY_EXPERIMENTAL))) {
+            System.setProperty(BYTE_BUDDY_EXPERIMENTAL, "true");
+            System.out.println("[DebugBridge] Enabled Byte Buddy experimental mode");
+        }
+    }
+
     /**
      * Get the Instrumentation instance.
      */
@@ -111,141 +109,34 @@ public class DebugBridgeAgent {
     public static void injectAdvice(String methodId) {
         if (instrumentation == null) {
             System.err.println("[DebugBridge] Cannot inject - "
-                + "Instrumentation not available");
+                    + "Instrumentation not available");
             return;
         }
 
-        // Parse methodId into class name and method name
-        int lastDot = methodId.lastIndexOf('.');
-        if (lastDot < 0) {
+        MethodHookTarget target = MethodHookTarget.parse(methodId).orElse(null);
+        if (target == null) {
             System.err.println("[DebugBridge] Invalid methodId: " + methodId);
             return;
         }
-        String className = methodId.substring(0, lastDot);
-        String methodName = methodId.substring(lastDot + 1);
 
-        System.out.println("[DebugBridge] Injecting advice on " + className
-            + "." + methodName);
+        System.out.println("[DebugBridge] Injecting advice on " + target.methodId());
 
         try {
-            // Check if we have cached post-Mixin bytecode for this class
-            String internalName = className.replace('.', '/');
-            byte[] cachedBytecode = BytecodeCache.get(internalName);
-
-            if (cachedBytecode != null && BytecodeCache.isMixinPresent()) {
-                // Use Mixin-safe transformation with cached bytecode
-                injectWithCachedBytecode(className, methodName, cachedBytecode);
-            } else {
-                // Standard transformation (no Mixin or class not cached)
-                injectStandard(className, methodName);
-            }
+            new AdviceInjector(instrumentation).inject(target);
 
             System.out.println("[DebugBridge] Advice injected successfully on "
-                + methodId);
+                    + methodId);
         } catch (Exception e) {
             System.err.println("[DebugBridge] Failed to inject advice on "
-                + methodId + ": " + e.getMessage());
+                    + methodId + ": " + e.getMessage());
             e.printStackTrace();
             // Remove from injectedMethods so it can be retried
             DebugBridgeLogger.injectedMethods.remove(methodId);
+            throw new IllegalStateException(
+                    "Failed to inject advice on " + methodId + ": " + e.getMessage(),
+                    e
+            );
         }
-    }
-
-    /**
-     * Standard advice injection using Byte Buddy's AgentBuilder.
-     * Used when Mixin is not present or bytecode is not cached.
-     */
-    private static void injectStandard(String className, String methodName) {
-        new AgentBuilder.Default()
-            // Critical: do not change class schema (no new methods/fields)
-            .disableClassFormatChanges()
-            // Use retransformation to modify already-loaded classes
-            .with(AgentBuilder.RedefinitionStrategy.RETRANSFORMATION)
-            .with(AgentBuilder.InitializationStrategy.NoOp.INSTANCE)
-            .with(AgentBuilder.TypeStrategy.Default.REDEFINE)
-            // Error handling
-            .with(new AgentBuilder.Listener.Adapter() {
-                @Override
-                public void onError(String typeName,
-                                    ClassLoader classLoader,
-                                    JavaModule module,
-                                    boolean loaded,
-                                    Throwable throwable) {
-                    System.err.println("[DebugBridge] Transform error on "
-                        + typeName + ": " + throwable.getMessage());
-                }
-
-                @Override
-                public void onComplete(String typeName,
-                                       ClassLoader classLoader,
-                                       JavaModule module,
-                                       boolean loaded) {
-                    System.out.println("[DebugBridge] Transform complete: " + typeName);
-                }
-            })
-            // Match the target class
-            .type(named(className))
-            // Install advice on the target method
-            .transform((builder, type, cl, module, pd) ->
-                builder.visit(
-                    Advice.to(LoggingAdvice.class)
-                          .on(named(methodName))))
-            .installOn(instrumentation);
-    }
-
-    /**
-     * Mixin-safe advice injection using cached post-Mixin bytecode.
-     *
-     * The problem: When we call Instrumentation.retransformClasses(), the JVM
-     * gives transformers the ORIGINAL bytecode (pre-Mixin), not the current
-     * bytecode. This strips all Mixin injections.
-     *
-     * The solution: Use our cached post-Mixin bytecode as the baseline for
-     * transformation, then install the result via redefineClasses() instead
-     * of retransformClasses().
-     */
-    private static void injectWithCachedBytecode(String className,
-                                                  String methodName,
-                                                  byte[] cachedBytecode) throws Exception {
-        System.out.println("[DebugBridge] Using cached bytecode for " + className
-            + " (" + cachedBytecode.length + " bytes)");
-
-        // Find the loaded class
-        Class<?> targetClass = null;
-        for (Class<?> c : instrumentation.getAllLoadedClasses()) {
-            if (c.getName().equals(className)) {
-                targetClass = c;
-                break;
-            }
-        }
-
-        if (targetClass == null) {
-            throw new ClassNotFoundException("Class not loaded: " + className);
-        }
-
-        // Use Byte Buddy to transform the cached bytecode
-        ClassFileLocator locator = ClassFileLocator.Simple.of(
-            className, cachedBytecode);
-
-        TypePool typePool = TypePool.Default.of(locator);
-        TypeDescription typeDesc = typePool.describe(className).resolve();
-
-        DynamicType.Builder<?> builder = new net.bytebuddy.ByteBuddy()
-            .redefine(typeDesc, locator);
-
-        // Apply advice
-        DynamicType.Unloaded<?> transformed = builder
-            .visit(Advice.to(LoggingAdvice.class).on(named(methodName)))
-            .make();
-
-        byte[] newBytecode = transformed.getBytes();
-
-        // Redefine the class with our transformed bytecode
-        instrumentation.redefineClasses(
-            new java.lang.instrument.ClassDefinition(targetClass, newBytecode));
-
-        // Update cache with the new bytecode (includes our advice + Mixin)
-        BytecodeCache.put(className.replace('.', '/'), newBytecode);
     }
 
     private static String resolveHooksJarPath(String args) {
@@ -257,9 +148,9 @@ public class DebugBridgeAgent {
 
         // Try to locate hooks JAR in common locations
         String[] searchPaths = {
-            "debugbridge-hooks.jar",
-            "libs/debugbridge-hooks.jar",
-            "../hooks/debugbridge-hooks.jar"
+                "debugbridge-hooks.jar",
+                "libs/debugbridge-hooks.jar",
+                "../hooks/debugbridge-hooks.jar"
         };
 
         for (String path : searchPaths) {
@@ -272,4 +163,5 @@ public class DebugBridgeAgent {
         // Hooks may already be on classpath
         return null;
     }
+
 }

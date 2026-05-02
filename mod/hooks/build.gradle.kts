@@ -7,7 +7,7 @@ description = "DebugBridge hooks - bootstrap classloader components"
 dependencies {
     // Byte Buddy annotations only (for LoggingAdvice)
     // These are read at transformation time, not runtime
-    compileOnly("net.bytebuddy:byte-buddy:1.14.18")
+    compileOnly("net.bytebuddy:byte-buddy:1.18.8")
 }
 
 tasks.jar {

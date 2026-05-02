@@ -27,6 +27,48 @@ import java.util.concurrent.TimeUnit;
  */
 public class Minecraft12111NearbyBlocksProvider implements NearbyBlocksProvider {
 
+    private static JsonArray signLines(SignText text) {
+        JsonArray lines = new JsonArray();
+        for (int i = 0; i < 4; i++) {
+            var msg = text.getMessage(i, false);
+            lines.add(msg == null ? "" : msg.getString());
+        }
+        return lines;
+    }
+
+    private static boolean anyNonEmpty(JsonArray arr) {
+        for (int i = 0; i < arr.size(); i++) {
+            if (!arr.get(i).getAsString().isEmpty()) return true;
+        }
+        return false;
+    }
+
+    private static String previewFor(BlockEntity be) {
+        if (be instanceof SignBlockEntity sign) {
+            StringBuilder sb = new StringBuilder();
+            SignText front = sign.getFrontText();
+            for (int i = 0; i < 4; i++) {
+                var msg = front.getMessage(i, false);
+                String s = msg == null ? "" : msg.getString();
+                if (!s.isEmpty()) {
+                    if (!sb.isEmpty()) sb.append(" / ");
+                    sb.append(s);
+                }
+            }
+            return !sb.isEmpty() ? sb.toString() : null;
+        }
+        if (be instanceof Container container) {
+            int filled = 0;
+            int size = container.getContainerSize();
+            for (int i = 0; i < size; i++) {
+                ItemStack s = container.getItem(i);
+                if (s != null && !s.isEmpty()) filled++;
+            }
+            return filled + " / " + size;
+        }
+        return null;
+    }
+
     @Override
     public JsonArray getNearbyBlocks(double range, int limit) throws Exception {
         Minecraft mc = Minecraft.getInstance();
@@ -65,8 +107,8 @@ public class Minecraft12111NearbyBlocksProvider implements NearbyBlocksProvider 
                             double by = pos.getY() + 0.5;
                             double bz = pos.getZ() + 0.5;
                             double distSq = (bx - px) * (bx - px)
-                                          + (by - py) * (by - py)
-                                          + (bz - pz) * (bz - pz);
+                                    + (by - py) * (by - py)
+                                    + (bz - pz) * (bz - pz);
                             if (distSq <= rangeSq) {
                                 entries.add(new Entry(pos, e.getValue(), Math.sqrt(distSq)));
                             }
@@ -172,47 +214,6 @@ public class Minecraft12111NearbyBlocksProvider implements NearbyBlocksProvider 
         return future.get(5, TimeUnit.SECONDS);
     }
 
-    private static JsonArray signLines(SignText text) {
-        JsonArray lines = new JsonArray();
-        for (int i = 0; i < 4; i++) {
-            var msg = text.getMessage(i, false);
-            lines.add(msg == null ? "" : msg.getString());
-        }
-        return lines;
+    private record Entry(BlockPos pos, BlockEntity blockEntity, double distance) {
     }
-
-    private static boolean anyNonEmpty(JsonArray arr) {
-        for (int i = 0; i < arr.size(); i++) {
-            if (!arr.get(i).getAsString().isEmpty()) return true;
-        }
-        return false;
-    }
-
-    private static String previewFor(BlockEntity be) {
-        if (be instanceof SignBlockEntity sign) {
-            StringBuilder sb = new StringBuilder();
-            SignText front = sign.getFrontText();
-            for (int i = 0; i < 4; i++) {
-                var msg = front.getMessage(i, false);
-                String s = msg == null ? "" : msg.getString();
-                if (!s.isEmpty()) {
-                    if (sb.length() > 0) sb.append(" / ");
-                    sb.append(s);
-                }
-            }
-            return sb.length() > 0 ? sb.toString() : null;
-        }
-        if (be instanceof Container container) {
-            int filled = 0;
-            int size = container.getContainerSize();
-            for (int i = 0; i < size; i++) {
-                ItemStack s = container.getItem(i);
-                if (s != null && !s.isEmpty()) filled++;
-            }
-            return filled + " / " + size;
-        }
-        return null;
-    }
-
-    private record Entry(BlockPos pos, BlockEntity blockEntity, double distance) {}
 }

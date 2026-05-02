@@ -3,9 +3,9 @@ package com.debugbridge.fabric12111;
 import com.debugbridge.core.entity.NearbyEntitiesProvider;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -26,6 +26,15 @@ import java.util.concurrent.TimeUnit;
  * per-entity Lua-to-Java bridge calls.
  */
 public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvider {
+
+    private static final EquipmentSlot[] PRIMARY_SLOT_ORDER = {
+            EquipmentSlot.HEAD,
+            EquipmentSlot.MAINHAND,
+            EquipmentSlot.OFFHAND,
+            EquipmentSlot.CHEST,
+            EquipmentSlot.LEGS,
+            EquipmentSlot.FEET,
+    };
 
     @Override
     public JsonArray getNearbyEntities(double range, int limit) throws Exception {
@@ -89,14 +98,16 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
 
                     // Primary equipment / framed / displayed item for thumbnail rendering
                     JsonObject primary = null;
-                    if (entity instanceof LivingEntity living) {
-                        primary = pickPrimaryEquipment(living);
-                    } else if (entity instanceof ItemFrame frame) {
-                        primary = buildPrimary("FRAME", frame.getItem());
-                    } else if (entity instanceof Display.ItemDisplay itemDisplay) {
-                        var renderState = itemDisplay.itemRenderState();
-                        if (renderState != null && renderState.itemStack() != null) {
-                            primary = buildPrimary("DISPLAY", renderState.itemStack());
+                    switch (entity) {
+                        case LivingEntity living -> primary = pickPrimaryEquipment(living);
+                        case ItemFrame frame -> primary = buildPrimary("FRAME", frame.getItem());
+                        case Display.ItemDisplay itemDisplay -> {
+                            var renderState = itemDisplay.itemRenderState();
+                            if (renderState != null) {
+                                primary = buildPrimary("DISPLAY", renderState.itemStack());
+                            }
+                        }
+                        default -> {
                         }
                     }
                     if (primary != null) {
@@ -158,7 +169,7 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
 
                 // Distance from player
                 obj.addProperty("distance",
-                    Math.round(target.distanceTo(mc.player) * 10.0) / 10.0);
+                        Math.round(target.distanceTo(mc.player) * 10.0) / 10.0);
 
                 // ItemFrame-specific: the framed item, with damage if applicable.
                 if (target instanceof ItemFrame frame) {
@@ -193,7 +204,7 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
                     addEquipment(equipment, "CHEST", living, EquipmentSlot.CHEST);
                     addEquipment(equipment, "LEGS", living, EquipmentSlot.LEGS);
                     addEquipment(equipment, "FEET", living, EquipmentSlot.FEET);
-                    if (equipment.size() > 0) {
+                    if (!equipment.isEmpty()) {
                         obj.add("equipment", equipment);
                     }
                 }
@@ -270,7 +281,7 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
                 var renderState = blockDisplay.blockRenderState();
                 if (renderState != null && renderState.blockState() != null) {
                     obj.addProperty("displayBlock",
-                        renderState.blockState().getBlock().getDescriptionId());
+                            renderState.blockState().getBlock().getDescriptionId());
                 }
             }
         } catch (Exception ignored) {
@@ -294,15 +305,6 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
         }
     }
 
-    private static final EquipmentSlot[] PRIMARY_SLOT_ORDER = {
-        EquipmentSlot.HEAD,
-        EquipmentSlot.MAINHAND,
-        EquipmentSlot.OFFHAND,
-        EquipmentSlot.CHEST,
-        EquipmentSlot.LEGS,
-        EquipmentSlot.FEET,
-    };
-
     private JsonObject pickPrimaryEquipment(LivingEntity living) {
         for (EquipmentSlot slot : PRIMARY_SLOT_ORDER) {
             JsonObject obj = buildPrimary(slot.name(), living.getItemBySlot(slot));
@@ -320,5 +322,6 @@ public class Minecraft12111NearbyEntitiesProvider implements NearbyEntitiesProvi
         return obj;
     }
 
-    private record EntityEntry(Entity entity, double distance) {}
+    private record EntityEntry(Entity entity, double distance) {
+    }
 }

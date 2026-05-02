@@ -23,6 +23,15 @@ import java.util.concurrent.TimeUnit;
  */
 public class Minecraft119NearbyEntitiesProvider implements NearbyEntitiesProvider {
 
+    private static final EquipmentSlot[] PRIMARY_SLOT_ORDER = {
+            EquipmentSlot.HEAD,
+            EquipmentSlot.MAINHAND,
+            EquipmentSlot.OFFHAND,
+            EquipmentSlot.CHEST,
+            EquipmentSlot.LEGS,
+            EquipmentSlot.FEET,
+    };
+
     @Override
     public JsonArray getNearbyEntities(double range, int limit) throws Exception {
         Minecraft mc = Minecraft.getInstance();
@@ -143,7 +152,7 @@ public class Minecraft119NearbyEntitiesProvider implements NearbyEntitiesProvide
                 obj.addProperty("z", target.getZ());
 
                 obj.addProperty("distance",
-                    Math.round(target.distanceTo(mc.player) * 10.0) / 10.0);
+                        Math.round(target.distanceTo(mc.player) * 10.0) / 10.0);
 
                 if (target instanceof ItemFrame frame) {
                     ItemStack framed = frame.getItem();
@@ -234,15 +243,6 @@ public class Minecraft119NearbyEntitiesProvider implements NearbyEntitiesProvide
         }
     }
 
-    private static final EquipmentSlot[] PRIMARY_SLOT_ORDER = {
-        EquipmentSlot.HEAD,
-        EquipmentSlot.MAINHAND,
-        EquipmentSlot.OFFHAND,
-        EquipmentSlot.CHEST,
-        EquipmentSlot.LEGS,
-        EquipmentSlot.FEET,
-    };
-
     private JsonObject pickPrimaryEquipment(LivingEntity living) {
         for (EquipmentSlot slot : PRIMARY_SLOT_ORDER) {
             JsonObject obj = buildPrimary(slot.name(), living.getItemBySlot(slot));
@@ -260,5 +260,6 @@ public class Minecraft119NearbyEntitiesProvider implements NearbyEntitiesProvide
         return obj;
     }
 
-    private record EntityEntry(Entity entity, double distance) {}
+    private record EntityEntry(Entity entity, double distance) {
+    }
 }
