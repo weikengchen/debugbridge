@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "id": "debugbridge",
   "version": "${version}",
-  "name": "DebugBridge 26.2 Snapshot Bridge",
-  "description": "DebugBridge development build for Minecraft 26.2-snapshot-5 with boot path parity and full provider coverage.",
+  "name": "DebugBridge 26.2 Dev Bridge",
+  "description": "DebugBridge development build for the Minecraft 26.2 snapshot line with boot path parity and full provider coverage.",
   "authors": [
     "Weikeng Chen"
   ],

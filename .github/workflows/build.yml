@@ -53,14 +53,14 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Build Fabric 26.2 snapshot mod
+      - name: Build Fabric 26.2 dev mod
         working-directory: mod
         run: ./gradlew :fabric-26.2-dev:build --no-daemon
 
       - name: Upload 26.2 artifact
         uses: actions/upload-artifact@v7
         with:
-          name: debugbridge-26.2-snapshot-5
+          name: debugbridge-26.2-dev
           path: mod/fabric-26.2-dev/build/libs/*.jar
           if-no-files-found: error
 

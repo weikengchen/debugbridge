@@ -3,7 +3,7 @@ plugins {
 }
 
 base {
-    archivesName.set("debugbridge-26.2-snapshot-5")
+    archivesName.set("debugbridge-26.2-dev")
 }
 
 java {
@@ -27,7 +27,7 @@ dependencies {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    // 26.2-snapshot-5's Mojang metadata declares Java runtime 25.
+    // The current 26.2 snapshot metadata declares Java runtime 25.
     options.release.set(25)
 }
 

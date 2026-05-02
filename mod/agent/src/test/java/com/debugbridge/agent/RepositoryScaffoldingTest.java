@@ -96,7 +96,7 @@ class RepositoryScaffoldingTest {
         String scriptText = Files.readString(script);
         assertTrue(scriptText.contains(":agent:test :core:test :hooks:jar :fabric-26.2-dev:jar"),
                 "live smoke script should build the affected DebugBridge artifacts");
-        assertTrue(scriptText.contains("debugbridge-26.2-snapshot-5"),
+        assertTrue(scriptText.contains("debugbridge-26.2-dev"),
                 "live smoke script should copy the 26.2 Fabric jar into the render-mod run folder");
         assertTrue(scriptText.contains("-Pdebugbridge.agent.jar="),
                 "live smoke script should pass the built agent jar path into runClient");

@@ -70,7 +70,7 @@ Mapped builds download or resolve the mapping metadata they need and use it to t
 - No need to learn or track obfuscated intermediary names
 - Code is more readable and maintainable
 
-26.2-snapshot-5 does not use this path. It runs against Mojang-named classes directly and skips mapping download/remap entirely.
+The 26.2 development build does not use this path. It runs against Mojang-named classes directly and skips mapping download/remap entirely.
 
 ## Security Model
 
@@ -102,7 +102,7 @@ The core mod that runs inside Minecraft:
 - `core/` - Shared code: Lua runtime, WebSocket server, mapping resolver
 - `fabric-1.19/` - Fabric mod for Minecraft 1.19.x
 - `fabric-1.21.11/` - Fabric mod for Minecraft 1.21.11
-- `fabric-26.2-dev/` - Fabric mod for Minecraft 26.2-snapshot-5
+- `fabric-26.2-dev/` - Fabric mod for Minecraft 26.2 development snapshots
 
 ### 2. Agent Module (`mod/agent/`, `mod/hooks/`)
 
@@ -126,9 +126,9 @@ Output JARs are in `mod/fabric-*/build/libs/`, including `mod/fabric-26.2-dev/bu
 
 - Minecraft 1.19
 - Minecraft 1.21.11
-- Minecraft 26.2-snapshot-5
+- Minecraft 26.2 development snapshots
 
-The 26.2-snapshot-5 render-backed providers must work on both Vulkan and OpenGL backends.
+The 26.2 render-backed providers must work on both Vulkan and OpenGL backends.
 
 ## Usage
 
@@ -171,7 +171,7 @@ The Fabric mod JARs include these libraries (shaded):
 
 ### Network Behavior
 
-- **Outbound**: Mapped builds may make an HTTPS request at startup to fetch Mojang mapping metadata from `piston-meta.mojang.com` and `launcher.mojang.com` (official Mojang APIs); 26.2-snapshot-5 skips that path
+- **Outbound**: Mapped builds may make an HTTPS request at startup to fetch Mojang mapping metadata from `piston-meta.mojang.com` and `launcher.mojang.com` (official Mojang APIs); 26.2 development builds skip that path
 - **Inbound**: WebSocket server on localhost:9876 (configurable via `DEBUGBRIDGE_PORT` environment variable)
 - **No telemetry, analytics, or other network activity**
 
@@ -200,6 +200,6 @@ Lua was chosen because:
 Minecraft's code is obfuscated differently across versions:
 - **1.19.x**: Uses Fabric's intermediary names at runtime and requires mappings
 - **1.21.11**: Uses the current mapping resolver behavior as implemented in this repository
-- **26.2-snapshot-5**: Unobfuscated; uses Mojang names directly and does not download or remap mappings
+- **26.2 development snapshots**: Unobfuscated; use Mojang names directly and do not download or remap mappings
 
 The mod detects which environment it's running in and applies mappings only for versions that need them.
