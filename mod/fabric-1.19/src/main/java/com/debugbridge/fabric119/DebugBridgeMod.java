@@ -158,7 +158,6 @@ public class DebugBridgeMod implements ClientModInitializer {
             server.setLookedAtEntityProvider(lookedAtProvider);
             server.setChatHistoryProvider(new Minecraft119ChatHistoryProvider());
             server.setScreenInspectProvider(new Minecraft119ScreenInspectProvider());
-            server.setLoggerInjectionEnabled(config.loggerInjectionEnabled);
             server.setRunCommandEnabled(config.runCommandEnabled);
 
             if (actualPort != config.port) {

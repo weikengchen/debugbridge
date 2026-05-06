@@ -108,7 +108,7 @@ This is a **development and debugging tool**, not a remote administration system
 
 - **Client-side only** — runs entirely on the client, cannot affect servers or other players
 - **No outbound connections** — only startup mapping downloads from Mojang's official APIs
-- **Gated features** — `runCommand` and `injectLogger` are disabled by default (opt-in via config)
+- **Gated features** — `runCommand` is disabled by default (opt-in via config)
 - **Developer warning** — first-launch screen informs the user the mod is active
 
 ## Repo Layout
@@ -118,8 +118,6 @@ mod/
   core/          — Shared Java: BridgeServer, Lua runtime, mapping resolver, provider interfaces
   fabric-1.19/   — Fabric mod for Minecraft 1.19.x (provider impls + mixins)
   fabric-1.21.11/— Fabric mod for Minecraft 1.21.11 (provider impls + mixins)
-  agent/         — Java Agent for runtime bytecode instrumentation (Byte Buddy)
-  hooks/         — Hook definitions for the agent module
 web-ui/          — Vue 3 + Pinia + Tailwind inspection app
 ```
 

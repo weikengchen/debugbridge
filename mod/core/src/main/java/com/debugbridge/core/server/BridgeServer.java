@@ -1,6 +1,5 @@
 package com.debugbridge.core.server;
 
-import com.debugbridge.core.logging.LoggerService;
 import com.debugbridge.core.lua.LuaRuntime;
 import com.debugbridge.core.lua.ThreadDispatcher;
 import com.debugbridge.core.mapping.MappingResolver;
@@ -26,8 +25,6 @@ import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -59,8 +56,6 @@ public class BridgeServer extends WebSocketServer {
      * Runtime logger injection service. Defaults to UNAVAILABLE until the
      * agent module registers itself.
      */
-    private volatile LoggerService loggerService = LoggerService.UNAVAILABLE;
-
     /**
      * Item texture resolver. Set by the version-specific module.
      */
@@ -100,12 +95,6 @@ public class BridgeServer extends WebSocketServer {
     private volatile Consumer<Exception> bindErrorCallback;
 
     /**
-     * Whether bytecode logger injection requests are honored. When false the
-     * three logger handlers behave as if they don't exist (Unknown request type).
-     */
-    private volatile boolean loggerInjectionEnabled = false;
-
-    /**
      * Whether slash-command execution via the bridge is honored. When false
      * runCommand requests behave as if they don't exist.
      */
@@ -141,19 +130,6 @@ public class BridgeServer extends WebSocketServer {
      */
     public void setGameDir(Path gameDir) {
         this.gameDir = gameDir;
-    }
-
-    /**
-     * Register the logger injection service. Called by the agent module
-     * when it initializes.
-     */
-    public void setLoggerService(LoggerService service) {
-        this.loggerService = service;
-        LOG.info("[DebugBridge] Logger service registered: " + service.getClass().getSimpleName());
-    }
-
-    public void setLoggerInjectionEnabled(boolean enabled) {
-        this.loggerInjectionEnabled = enabled;
     }
 
     public void setRunCommandEnabled(boolean enabled) {
@@ -285,15 +261,6 @@ public class BridgeServer extends WebSocketServer {
                 case "setEntityGlow" -> handleSetEntityGlow(req);
                 case "setBlockGlow" -> handleSetBlockGlow(req);
                 case "clearBlockGlow" -> handleClearBlockGlow(req);
-                case "injectLogger" -> loggerInjectionEnabled
-                    ? handleInjectLogger(req)
-                    : BridgeResponse.error(req.id, "Unknown request type: injectLogger");
-                case "cancelLogger" -> loggerInjectionEnabled
-                    ? handleCancelLogger(req)
-                    : BridgeResponse.error(req.id, "Unknown request type: cancelLogger");
-                case "listLoggers" -> loggerInjectionEnabled
-                    ? handleListLoggers(req)
-                    : BridgeResponse.error(req.id, "Unknown request type: listLoggers");
                 default -> BridgeResponse.error(req.id, "Unknown request type: " + req.type);
             };
         } catch (Exception e) {
@@ -834,112 +801,4 @@ public class BridgeServer extends WebSocketServer {
         return BridgeResponse.success(req.id, result, null);
     }
 
-    // ==================== Logger Injection Handlers ====================
-
-    private BridgeResponse handleInjectLogger(BridgeRequest req) {
-        if (!loggerService.isAvailable()) {
-            return BridgeResponse.error(req.id,
-                "Logger injection not available. Start Minecraft with " +
-                "-javaagent:debugbridge-agent.jar to enable runtime instrumentation.");
-        }
-
-        try {
-            String method = req.payload.get("method").getAsString();
-            int durationSeconds = req.payload.has("duration_seconds")
-                ? req.payload.get("duration_seconds").getAsInt() : 60;
-            String outputFile = req.payload.has("output_file") && !req.payload.get("output_file").isJsonNull()
-                ? req.payload.get("output_file").getAsString() : null;
-            boolean logArgs = !req.payload.has("log_args") || req.payload.get("log_args").getAsBoolean();
-            boolean logReturn = req.payload.has("log_return") && req.payload.get("log_return").getAsBoolean();
-            boolean logTiming = !req.payload.has("log_timing") || req.payload.get("log_timing").getAsBoolean();
-            int argDepth = req.payload.has("arg_depth") ? req.payload.get("arg_depth").getAsInt() : 1;
-
-            // Parse filter
-            Map<String, Object> filter = null;
-            if (req.payload.has("filter") && !req.payload.get("filter").isJsonNull()) {
-                filter = parseFilter(req.payload.getAsJsonObject("filter"));
-            }
-
-            LoggerService.InstallResult result = loggerService.install(
-                method, durationSeconds, outputFile,
-                logArgs, logReturn, logTiming, argDepth, filter);
-
-            if (!result.success()) {
-                return BridgeResponse.error(req.id, result.error());
-            }
-
-            JsonObject response = new JsonObject();
-            response.addProperty("logger_id", result.loggerId());
-            response.addProperty("output_file", result.outputFile());
-            if (result.message() != null) {
-                response.addProperty("message", result.message());
-            }
-            return BridgeResponse.success(req.id, response, null);
-
-        } catch (Exception e) {
-            return BridgeResponse.error(req.id,
-                "Failed to inject logger: " + e.getMessage());
-        }
-    }
-
-    private Map<String, Object> parseFilter(JsonObject filterJson) {
-        Map<String, Object> filter = new HashMap<>();
-        filter.put("type", filterJson.get("type").getAsString());
-
-        if (filterJson.has("interval_ms")) {
-            filter.put("interval_ms", filterJson.get("interval_ms").getAsLong());
-        }
-        if (filterJson.has("index")) {
-            filter.put("index", filterJson.get("index").getAsInt());
-        }
-        if (filterJson.has("substring")) {
-            filter.put("substring", filterJson.get("substring").getAsString());
-        }
-        if (filterJson.has("class_name")) {
-            filter.put("class_name", filterJson.get("class_name").getAsString());
-        }
-        if (filterJson.has("n")) {
-            filter.put("n", filterJson.get("n").getAsInt());
-        }
-
-        return filter;
-    }
-
-    private BridgeResponse handleCancelLogger(BridgeRequest req) {
-        if (!loggerService.isAvailable()) {
-            return BridgeResponse.error(req.id, "Logger service not available.");
-        }
-
-        long id = req.payload.get("id").getAsLong();
-        boolean cancelled = loggerService.cancel(id);
-
-        JsonObject response = new JsonObject();
-        response.addProperty("cancelled", cancelled);
-        return BridgeResponse.success(req.id, response, null);
-    }
-
-    private BridgeResponse handleListLoggers(BridgeRequest req) {
-        JsonObject response = new JsonObject();
-
-        JsonArray loggersArray = new JsonArray();
-        for (LoggerService.LoggerInfo info : loggerService.listActive()) {
-            JsonObject logger = new JsonObject();
-            logger.addProperty("id", info.id());
-            logger.addProperty("method", info.method());
-            logger.addProperty("remaining_ms", info.remainingMs());
-            logger.addProperty("has_filter", info.hasFilter());
-            loggersArray.add(logger);
-        }
-        response.add("loggers", loggersArray);
-
-        JsonArray injectedArray = new JsonArray();
-        for (String method : loggerService.listInjectedMethods()) {
-            injectedArray.add(method);
-        }
-        response.add("injected_methods", injectedArray);
-
-        response.addProperty("available", loggerService.isAvailable());
-
-        return BridgeResponse.success(req.id, response, null);
-    }
 }
